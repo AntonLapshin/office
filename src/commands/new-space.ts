@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { spacesDir, slugify } from "../lib/paths.js";
 import { readConfig } from "../lib/config.js";
@@ -34,5 +35,10 @@ export async function runNewSpace(
     config,
   );
 
-  console.log(`\noffice new-space complete — check ${outputPath}`);
+  if (fs.existsSync(outputPath)) {
+    console.log(`\noffice new-space complete — check ${outputPath}`);
+  } else {
+    console.error(`\noffice new-space failed — the model did not create ${outputPath}`);
+    process.exit(1);
+  }
 }

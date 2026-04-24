@@ -55,5 +55,10 @@ export async function runNewCharacter(
     config,
   );
 
-  console.log(`\noffice new-character complete — check ${outputPath}`);
+  if (fs.existsSync(outputPath)) {
+    console.log(`\noffice new-character complete — check ${outputPath}`);
+  } else {
+    console.error(`\noffice new-character failed — the model did not create ${outputPath}`);
+    process.exit(1);
+  }
 }
