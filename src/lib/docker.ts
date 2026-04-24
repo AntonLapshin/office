@@ -71,6 +71,11 @@ function buildContainerFlags(): string[] {
     flags.push("-v", `${opencodeConfig}:${CONTAINER_WORKDIR}/opencode.json:ro`);
   }
 
+  const officeConfig = path.join(process.cwd(), "config.json");
+  if (fs.existsSync(officeConfig)) {
+    flags.push("-v", `${officeConfig}:${CONTAINER_WORKDIR}/.office/config.json:ro`);
+  }
+
   const passthroughEnv = ["ANTHROPIC_API_KEY", "OFFICE_RUNNER"];
   for (const key of passthroughEnv) {
     if (process.env[key]) {
@@ -112,23 +117,21 @@ export async function removeContainer(): Promise<void> {
   });
 }
 
-export async function dockerExec(
-  args: string[],
-  opts: { interactive?: boolean } = {},
-): Promise<void> {
-  const flags: string[] = [];
-  if (opts.interactive) {
-    flags.push("-i");
-    if (process.stdout.isTTY) flags.push("-t");
-  }
+export async function removeImage(): Promise<void> {
+  await execa("docker", ["rmi", IMAGE_NAME], {
+    reject: false,
+    stdio: "pipe",
+  });
+}
+
+export async function dockerExec(args: string[]): Promise<void> {
+  const flags: string[] = ["-i"];
+  if (process.stdout.isTTY) flags.push("-t");
 
   const res = await execa(
     "docker",
     ["exec", ...flags, CONTAINER_NAME, ...args],
-    {
-      stdio: opts.interactive ? "inherit" : ["ignore", "inherit", "inherit"],
-      reject: false,
-    },
+    { stdio: "inherit", reject: false },
   );
 
   if (res.exitCode !== 0) {

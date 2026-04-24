@@ -5,6 +5,7 @@ import { officeRoot } from "./paths.js";
 
 const configSchema = z.object({
   runner: z.enum(["claude", "opencode"]).nullable().default("opencode"),
+  logging: z.boolean().default(true),
   timeouts: z
     .object({
       personaRunMs: z.number().int().default(600_000),

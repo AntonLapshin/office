@@ -52,6 +52,7 @@ office stop
 ```bash
 office start       # Start container (builds image on first run, inits data on first start)
 office stop        # Stop container (data is preserved)
+office restart     # Rebuild image and recreate container from scratch
 office status      # Show whether the container is running
 ```
 
@@ -89,6 +90,46 @@ office session list                      # List all sessions
 | `--characters <names>` | Comma-separated character names |
 | `--description <text>` | Scene-setting description (default: "Office simulation") |
 | `--user <name>` | Which character you control (omit for fully autonomous) |
+
+## Configuration
+
+Place a `config.json` in the directory where you run `office start`. It will be mounted into the container automatically.
+
+```json
+{
+  "runner": "opencode",
+  "logging": true,
+  "timeouts": {
+    "personaRunMs": 600000
+  },
+  "maxRounds": 50
+}
+```
+
+| Field | Default | Description |
+|---|---|---|
+| `runner` | `"opencode"` | Force `"claude"` or `"opencode"` (null = auto-detect) |
+| `logging` | `true` | Print runner commands, keep prompt files for inspection |
+| `timeouts.personaRunMs` | `600000` | Max time per persona invocation (ms) |
+| `maxRounds` | `50` | Safety limit for autonomous sessions |
+
+When `logging` is enabled you will see the full agent output (tool calls, reasoning, errors) and the prompt files are kept in `.office/` inside the container for inspection.
+
+## Using OpenCode with local models
+
+Place an `opencode.json` next to your `config.json`. It will be mounted into the container automatically.
+
+Use `host.docker.internal` instead of `localhost` to reach Ollama running on the host:
+
+```json
+{
+  "provider": {
+    "ollama": {
+      "apiBase": "http://host.docker.internal:11434"
+    }
+  }
+}
+```
 
 ## Session structure
 
@@ -133,48 +174,6 @@ When it's your turn, type your speech at the prompt:
 - `/quit` — pause the session (resume later with `office session continue`)
 - Empty line — skip your turn
 
-## Using OpenCode with local models
-
-To use OpenCode with a local Ollama provider, create an `opencode.json` in the directory where you run `office start`. It will be mounted into the container automatically.
-
-Your `opencode.json` should use `host.docker.internal` instead of `localhost` to reach Ollama running on the host:
-
-```json
-{
-  "provider": {
-    "ollama": {
-      "apiBase": "http://host.docker.internal:11434"
-    }
-  }
-}
-```
-
-Set the runner via environment variable or config:
-
-```bash
-OFFICE_RUNNER=opencode office start
-```
-
-## Configuration
-
-The container stores its config at `.office/config.json` (inside the Docker volume):
-
-```json
-{
-  "runner": "opencode",
-  "timeouts": {
-    "personaRunMs": 600000
-  },
-  "maxRounds": 50
-}
-```
-
-| Field | Default | Description |
-|---|---|---|
-| `runner` | `"opencode"` | Force `"claude"` or `"opencode"` (null = auto-detect) |
-| `timeouts.personaRunMs` | `600000` | Max time per persona invocation (ms) |
-| `maxRounds` | `50` | Safety limit for autonomous sessions |
-
 ## Data persistence
 
 All data (spaces, characters, sessions) is stored in a Docker named volume called `office-data`. It persists across `office stop` / `office start` cycles and even if the container is removed.
@@ -193,11 +192,8 @@ npm run build    # compile once
 npm run dev      # watch mode
 ```
 
-To rebuild the Docker image after code changes:
+After code changes, rebuild everything with a single command:
 
 ```bash
-office stop
-docker rm office-sim
-docker rmi office-sim:latest
-office start     # rebuilds from source
+office restart
 ```

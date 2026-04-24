@@ -86,12 +86,18 @@ export async function spawnPersona(
   const args = buildRunnerArgs(runner, shortPrompt);
 
   const logDir = ctx.sessionDir ?? ctx.projectRoot;
+  const log = config.logging;
+
   appendLog(logDir, "orchestrator", `spawning ${role}`);
+  if (log) {
+    console.log(`\n[office] spawning ${role}: ${bin} ${args.join(" ")}`);
+    console.log(`[office] prompt file: ${promptFile}`);
+  }
 
   try {
     const res = await execa(bin, args, {
       cwd: ctx.projectRoot,
-      stdio: ["ignore", "inherit", "inherit"],
+      stdio: "inherit",
       reject: false,
       timeout: config.timeouts.personaRunMs,
       env: {
@@ -112,8 +118,12 @@ export async function spawnPersona(
       if (res.stderr) {
         console.error(res.stderr);
       }
+    } else if (log) {
+      console.log(`[office] ${role} finished successfully`);
     }
   } finally {
-    try { fs.unlinkSync(promptFile); } catch {}
+    if (!log) {
+      try { fs.unlinkSync(promptFile); } catch {}
+    }
   }
 }

@@ -3,6 +3,7 @@ import { Command } from "commander";
 import { ensureRunning, dockerExec } from "./lib/docker.js";
 import { runStartDocker } from "./commands/start-docker.js";
 import { runStopDocker } from "./commands/stop-docker.js";
+import { runRestartDocker } from "./commands/restart-docker.js";
 import { runStatusDocker } from "./commands/status-docker.js";
 import { runInit } from "./commands/init.js";
 import { runNewSpace } from "./commands/new-space.js";
@@ -37,6 +38,13 @@ program
   });
 
 program
+  .command("restart")
+  .description("Rebuild image and recreate the container from scratch")
+  .action(async () => {
+    await runRestartDocker();
+  });
+
+program
   .command("status")
   .description("Show office container status")
   .action(async () => {
@@ -55,10 +63,7 @@ character
   .argument("<description...>", "brief character description")
   .action(async (description: string[]) => {
     await ensureRunning();
-    await dockerExec(
-      ["office", "_exec", "new-character", description.join(" ")],
-      { interactive: true },
-    );
+    await dockerExec(["office", "_exec", "new-character", description.join(" ")]);
   });
 
 character
@@ -81,10 +86,7 @@ space
   .argument("<description...>", "brief space description")
   .action(async (description: string[]) => {
     await ensureRunning();
-    await dockerExec(
-      ["office", "_exec", "new-space", description.join(" ")],
-      { interactive: true },
-    );
+    await dockerExec(["office", "_exec", "new-space", description.join(" ")]);
   });
 
 space
@@ -122,7 +124,7 @@ session
     ];
     if (opts.description) args.push("--description", opts.description);
     if (opts.user) args.push("--user", opts.user);
-    await dockerExec(args, { interactive: true });
+    await dockerExec(args);
   });
 
 session
@@ -131,10 +133,7 @@ session
   .argument("<session_name>", "session directory name")
   .action(async (sessionName: string) => {
     await ensureRunning();
-    await dockerExec(
-      ["office", "_exec", "session-continue", sessionName],
-      { interactive: true },
-    );
+    await dockerExec(["office", "_exec", "session-continue", sessionName]);
   });
 
 session
