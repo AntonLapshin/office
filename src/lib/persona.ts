@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { execa } from "execa";
 import { personaTemplateDir } from "./paths.js";
@@ -76,7 +75,9 @@ export async function spawnPersona(
 
   // Write the full prompt to a temp file to avoid OS command-line length
   // limits and argument-quoting issues (especially on Windows).
-  const promptFile = path.join(os.tmpdir(), `office-${role}-${Date.now()}.md`);
+  const officeDir = path.join(ctx.projectRoot, ".office");
+  fs.mkdirSync(officeDir, { recursive: true });
+  const promptFile = path.join(officeDir, `.prompt-${role}-${Date.now()}.md`);
   fs.writeFileSync(promptFile, fullPrompt, "utf8");
 
   const shortPrompt =
