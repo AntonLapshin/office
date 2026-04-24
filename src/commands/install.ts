@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { commandTemplateDir, officeRoot } from "../lib/paths.js";
+import { commandTemplateDir, officeRoot, packageRoot } from "../lib/paths.js";
 import { writeDefaultConfigIfMissing } from "../lib/config.js";
 
 export interface InstallOptions {
@@ -24,6 +24,12 @@ export async function runInstall(opts: InstallOptions = {}): Promise<void> {
   const office = officeRoot(projectRoot);
   for (const sub of ["spaces", "characters", "sessions"]) {
     fs.mkdirSync(path.join(office, sub), { recursive: true });
+  }
+
+  const readmeSrc = path.join(packageRoot(), "README.md");
+  if (fs.existsSync(readmeSrc)) {
+    fs.copyFileSync(readmeSrc, path.join(office, "README.md"));
+    console.log("  copied README.md to .office/");
   }
 
   writeDefaultConfigIfMissing(projectRoot);

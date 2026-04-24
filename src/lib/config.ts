@@ -4,7 +4,7 @@ import { z } from "zod";
 import { officeRoot } from "./paths.js";
 
 const configSchema = z.object({
-  runner: z.enum(["claude", "opencode"]).nullable().default(null),
+  runner: z.enum(["claude", "opencode"]).nullable().default("opencode"),
   timeouts: z
     .object({
       personaRunMs: z.number().int().default(600_000),

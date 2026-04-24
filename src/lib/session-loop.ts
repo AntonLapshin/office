@@ -169,7 +169,10 @@ async function promptUser(characterName: string): Promise<string | null> {
   });
 
   return new Promise((resolve) => {
+    let answered = false;
+
     rl.question(`[You as ${characterName}] > `, (answer) => {
+      answered = true;
       rl.close();
       if (answer.trim().toLowerCase() === "/quit") {
         resolve(null);
@@ -179,7 +182,9 @@ async function promptUser(characterName: string): Promise<string | null> {
     });
 
     rl.on("close", () => {
-      resolve(null);
+      if (!answered) {
+        resolve(null);
+      }
     });
   });
 }
