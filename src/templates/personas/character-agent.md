@@ -21,7 +21,7 @@ Read these from the session directory (Session context):
 
 4. Read the other character state JSON files to determine who is in your room or nearby.
 
-5. Read the last 30 lines of timeline.log. Understand:
+5. Read the full timeline.log file. Understand:
    - What was just said to you or in your presence
    - What the Stage Manager narrated about physical actions
    - The flow of conversation

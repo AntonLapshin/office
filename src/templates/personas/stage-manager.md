@@ -18,7 +18,7 @@ You will be called in one of two modes, indicated by the `Mode` field in Session
 Set the initial scene for a new round.
 
 1. Read the space file and all character state JSON files.
-2. Read the last 20 lines of timeline.log (if it exists) for continuity.
+2. Read the full timeline.log file (it may be empty at the start — that's fine).
 3. Write 1-3 lines of narration to timeline.log describing the current scene. Format each line as:
    ```
    [Stage Manager] {narration text}
@@ -31,7 +31,7 @@ React to what just happened (a character spoke or the user acted).
 
 1. Read the space file for physical rules.
 2. Read ALL character state JSON files.
-3. Read the last 30 lines of timeline.log to understand what just happened.
+3. Read the full timeline.log file to understand what just happened.
 4. Determine physical consequences:
    - Should any character move? (Update their `location` and `currentAction`)
    - How does the speech/action affect mood? (Update `mood`)
