@@ -41,6 +41,12 @@ Take a brief user description and produce a detailed markdown file describing a 
    - How they behave once comfortable
    - What kind of people they gravitate toward
 
+   **## Relationships**
+   If existing character descriptions are provided in the Pre-loaded context section below, write a relationship entry for each:
+   - **{Name}**: One sentence describing the likely initial dynamic between them, based on both characters' personalities, roles, and backgrounds.
+   
+   If no existing characters are provided, omit this section entirely.
+
 3. Exit.
 
 ## Guardrails

@@ -16,6 +16,7 @@ export interface PersonaContext {
   sessionDir?: string;
   projectRoot: string;
   extraContext?: Record<string, string>;
+  embeddedFiles?: Record<string, string>;
 }
 
 export function buildPersonaPrompt(role: PersonaRole, ctx: PersonaContext): string {
@@ -34,6 +35,29 @@ export function buildPersonaPrompt(role: PersonaRole, ctx: PersonaContext): stri
   if (ctx.extraContext) {
     for (const [key, value] of Object.entries(ctx.extraContext)) {
       lines.push(`- ${key}: \`${value}\``);
+    }
+  }
+
+  if (ctx.embeddedFiles && Object.keys(ctx.embeddedFiles).length > 0) {
+    lines.push("", "## Pre-loaded context", "");
+    lines.push(
+      "All files below are pre-loaded. Use this content directly — do **not** re-read these files from disk. When you need to write back to a file, use the path from Session context above.",
+    );
+    lines.push("");
+    for (const [label, filePath] of Object.entries(ctx.embeddedFiles)) {
+      const ext = path.extname(filePath).slice(1) || "text";
+      try {
+        const content = fs.readFileSync(filePath, "utf8");
+        lines.push(`### ${label}`);
+        lines.push("```" + ext);
+        lines.push(content.trimEnd() || "(empty)");
+        lines.push("```");
+        lines.push("");
+      } catch {
+        lines.push(`### ${label}`);
+        lines.push("(file not found)");
+        lines.push("");
+      }
     }
   }
 

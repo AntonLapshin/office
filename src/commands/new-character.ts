@@ -1,5 +1,6 @@
+import fs from "node:fs";
 import path from "node:path";
-import { charactersDir, slugify } from "../lib/paths.js";
+import { charactersDir, slugify, capitalize } from "../lib/paths.js";
 import { readConfig } from "../lib/config.js";
 import { detectRunner } from "../lib/runner.js";
 import { spawnPersona } from "../lib/persona.js";
@@ -12,9 +13,9 @@ export interface NewCharacterOptions {
 function extractName(description: string): string {
   const firstWord = description.split(/[\s,]+/)[0];
   if (firstWord && /^[A-Z]/.test(firstWord)) {
-    return firstWord.toLowerCase();
+    return firstWord;
   }
-  return slugify(description).slice(0, 30);
+  return capitalize(slugify(description).slice(0, 30));
 }
 
 export async function runNewCharacter(
@@ -27,6 +28,16 @@ export async function runNewCharacter(
   const name = extractName(description);
   const outputPath = path.join(charactersDir(projectRoot), `${name}.md`);
 
+  const charDir = charactersDir(projectRoot);
+  const embeddedFiles: Record<string, string> = {};
+  if (fs.existsSync(charDir)) {
+    for (const file of fs.readdirSync(charDir)) {
+      if (file.endsWith(".md") && file !== `${name}.md`) {
+        embeddedFiles[`Existing character: ${file.replace(".md", "")}`] = path.join(charDir, file);
+      }
+    }
+  }
+
   console.log(`Creating character: ${description}`);
 
   await spawnPersona(
@@ -38,6 +49,7 @@ export async function runNewCharacter(
         "Character name": name,
         "Output path": outputPath,
       },
+      embeddedFiles: Object.keys(embeddedFiles).length > 0 ? embeddedFiles : undefined,
     },
     runner,
     config,

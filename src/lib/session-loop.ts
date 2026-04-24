@@ -103,6 +103,14 @@ async function spawnStageManager(
     .map((name) => path.join(sessionDir, `${name}.json`))
     .join(", ");
 
+  const embeddedFiles: Record<string, string> = {
+    [`Space: ${session.spaceName}`]: path.join(sessionDir, `${session.spaceName}.md`),
+  };
+  for (const name of session.characters) {
+    embeddedFiles[`Character state: ${name}`] = path.join(sessionDir, `${name}.json`);
+  }
+  embeddedFiles["Timeline"] = path.join(sessionDir, "timeline.log");
+
   await spawnPersona(
     "stage-manager",
     {
@@ -115,6 +123,7 @@ async function spawnStageManager(
         "Timeline": path.join(sessionDir, "timeline.log"),
         "Current round": String(session.currentRound),
       },
+      embeddedFiles,
     },
     runner,
     config,
@@ -133,6 +142,18 @@ async function spawnCharacterAgent(
     .map((name) => path.join(sessionDir, `${name}.json`))
     .join(", ");
 
+  const embeddedFiles: Record<string, string> = {
+    [`Character description: ${characterName}`]: path.join(sessionDir, `${characterName}.md`),
+    [`Character state: ${characterName}`]: path.join(sessionDir, `${characterName}.json`),
+    [`Space: ${session.spaceName}`]: path.join(sessionDir, `${session.spaceName}.md`),
+  };
+  for (const name of session.characters) {
+    if (name !== characterName) {
+      embeddedFiles[`Other character state: ${name}`] = path.join(sessionDir, `${name}.json`);
+    }
+  }
+  embeddedFiles["Timeline"] = path.join(sessionDir, "timeline.log");
+
   await spawnPersona(
     "character-agent",
     {
@@ -146,6 +167,7 @@ async function spawnCharacterAgent(
         "All character states": allStates,
         "Timeline": path.join(sessionDir, "timeline.log"),
       },
+      embeddedFiles,
     },
     runner,
     config,

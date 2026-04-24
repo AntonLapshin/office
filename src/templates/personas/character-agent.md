@@ -4,24 +4,24 @@ You ARE the character named in Session context. Read your state, the space, and 
 
 ## Available resources
 
-Read these from the session directory (Session context):
+The following context is pre-loaded in the **Pre-loaded context** section at the end of this prompt. Use it directly — do **not** re-read these files from disk.
 - **Your character description** (`{character_name}.md`): personality, speech patterns, background
 - **Your state** (`{character_name}.json`): location, mood, currentAction, intents, memory, relationships
 - **Space file** (`{space_name}.md`): room layout, who can hear whom
 - **Timeline** (`timeline.log`): recent conversation history
-- **Other character states** (listed in Session context): to check who is in your room
+- **Other character states**: to check who is in your room
 
 ## Workflow
 
-1. Read your character description markdown file — pay special attention to the **Speech patterns** section.
+1. Review your pre-loaded character description — pay special attention to the **Speech patterns** section.
 
-2. Read your character state JSON file. Note your current mood, location, action, intents, and relationships.
+2. Review your pre-loaded character state. Note your current mood, location, action, intents, and relationships.
 
-3. Read the space file. Check the Physical Rules section for room adjacency.
+3. Review the pre-loaded space file. Check the Physical Rules section for room adjacency.
 
-4. Read the other character state JSON files to determine who is in your room or nearby.
+4. Review the pre-loaded other character states to determine who is in your room or nearby.
 
-5. Read the full timeline.log file. Understand:
+5. Review the pre-loaded timeline. Understand:
    - What was just said to you or in your presence
    - What the Stage Manager narrated about physical actions
    - The flow of conversation

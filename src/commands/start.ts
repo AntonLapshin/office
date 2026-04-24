@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { spacesDir, charactersDir, sessionsDir, sessionDirName } from "../lib/paths.js";
+import { spacesDir, charactersDir, sessionsDir, sessionDirName, capitalize } from "../lib/paths.js";
 import { writeSession } from "../lib/session-io.js";
 import { writeCharacterState } from "../lib/session-io.js";
 import { runSessionLoop } from "../lib/session-loop.js";
@@ -17,10 +17,10 @@ export interface StartOptions {
 
 export async function runStart(opts: StartOptions): Promise<void> {
   const projectRoot = opts.projectRoot ?? process.cwd();
-  const spaceName = opts.space;
-  const characterNames = opts.characters.split(",").map((s) => s.trim().toLowerCase());
+  const spaceName = opts.space.trim().toLowerCase();
+  const characterNames = opts.characters.split(",").map((s) => capitalize(s.trim().toLowerCase()));
   const description = opts.description ?? "Office simulation";
-  const userCharacter = opts.user?.toLowerCase() ?? null;
+  const userCharacter = opts.user ? capitalize(opts.user.trim().toLowerCase()) : null;
 
   const spaceFile = path.join(spacesDir(projectRoot), `${spaceName}.md`);
   if (!fs.existsSync(spaceFile)) {
