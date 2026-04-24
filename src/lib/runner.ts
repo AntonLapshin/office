@@ -27,11 +27,19 @@ async function onPath(bin: string): Promise<boolean> {
   }
 }
 
-export function buildRunnerArgs(runner: Runner, prompt: string, extra: string[] = []): string[] {
+export function buildRunnerArgs(
+  runner: Runner,
+  prompt: string,
+  model?: string | null,
+): string[] {
   if (runner === "claude") {
-    return ["-p", prompt, "--permission-mode", "bypassPermissions", ...extra];
+    const args = ["-p", prompt, "--permission-mode", "bypassPermissions"];
+    if (model) args.push("--model", model);
+    return args;
   }
-  return ["run", prompt, ...extra];
+  const args = ["run", prompt];
+  if (model) args.push("--model", model);
+  return args;
 }
 
 export function runnerBinary(runner: Runner): string {

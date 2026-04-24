@@ -4,6 +4,7 @@ import { charactersDir, slugify, capitalize } from "../lib/paths.js";
 import { readConfig } from "../lib/config.js";
 import { detectRunner } from "../lib/runner.js";
 import { spawnPersona } from "../lib/persona.js";
+import { appendLog, appendPerf } from "../lib/logger.js";
 
 export interface NewCharacterOptions {
   runner?: string;
@@ -27,6 +28,9 @@ export async function runNewCharacter(
   const runner = await detectRunner(opts.runner ?? config.runner ?? undefined);
   const name = extractName(description);
   const outputPath = path.join(charactersDir(projectRoot), `${name}.md`);
+  const model = config.models["character-creator"] ?? null;
+
+  appendLog(projectRoot, "new-character", `starting | description="${description}" | name="${name}" | outputPath="${outputPath}" | runner=${runner}`);
 
   const charDir = charactersDir(projectRoot);
   const embeddedFiles: Record<string, string> = {};
@@ -38,8 +42,11 @@ export async function runNewCharacter(
     }
   }
 
+  const existingCount = Object.keys(embeddedFiles).length;
+  appendLog(projectRoot, "new-character", `embedded ${existingCount} existing character(s) as context`);
   console.log(`Creating character: ${description}`);
 
+  const startTime = Date.now();
   await spawnPersona(
     "character-creator",
     {
@@ -49,16 +56,29 @@ export async function runNewCharacter(
         "Character name": name,
         "Output path": outputPath,
       },
-      embeddedFiles: Object.keys(embeddedFiles).length > 0 ? embeddedFiles : undefined,
+      embeddedFiles: existingCount > 0 ? embeddedFiles : undefined,
     },
     runner,
     config,
   );
+  const durationMs = Date.now() - startTime;
 
-  if (fs.existsSync(outputPath)) {
+  const ok = fs.existsSync(outputPath);
+  appendPerf(projectRoot, {
+    role: "character-creator",
+    model,
+    runner,
+    durationMs,
+    status: ok ? "success" : "error",
+  });
+
+  if (ok) {
+    appendLog(projectRoot, "new-character", `success — file created at ${outputPath}`);
     console.log(`\noffice new-character complete — check ${outputPath}`);
   } else {
+    appendLog(projectRoot, "new-character", `FAILED — model did not create ${outputPath}`);
     console.error(`\noffice new-character failed — the model did not create ${outputPath}`);
+    console.error(`Check .office/logs/ for the full persona output to diagnose the issue.`);
     process.exit(1);
   }
 }

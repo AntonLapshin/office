@@ -3,6 +3,7 @@ import readline from "node:readline";
 import { readConfig, type Config } from "./config.js";
 import { detectRunner, type Runner } from "./runner.js";
 import { spawnPersona } from "./persona.js";
+import { appendPerf } from "./logger.js";
 import { readSession, writeSession } from "./session-io.js";
 import { appendTimeline, readRecentTimeline } from "./timeline.js";
 import type { Session } from "./schema.js";
@@ -28,7 +29,9 @@ export async function runSessionLoop(
     if (session.turnPhase === "stage-manager-init") {
       console.log(`\n--- Round ${session.currentRound + 1} ---\n`);
 
+      const smInitStart = Date.now();
       await spawnStageManager(sessionDir, projectRoot, runner, config, session, "init");
+      appendPerf(projectRoot, { role: "stage-manager/init", model: config.models["stage-manager"] ?? null, runner, durationMs: Date.now() - smInitStart, status: "success" });
       printRecentTimeline(sessionDir, 5);
 
       session.turnPhase = "character-turn";
@@ -56,7 +59,9 @@ export async function runSessionLoop(
         }
       } else {
         console.log(`\n[${characterName}'s turn]`);
+        const caStart = Date.now();
         await spawnCharacterAgent(sessionDir, projectRoot, runner, config, session, characterName);
+        appendPerf(projectRoot, { role: `character-agent/${characterName}`, model: config.models["character-agent"] ?? null, runner, durationMs: Date.now() - caStart, status: "success" });
         printRecentTimeline(sessionDir, 3);
       }
 
@@ -65,7 +70,9 @@ export async function runSessionLoop(
     }
 
     if (session.turnPhase === "stage-manager-update") {
+      const smUpdateStart = Date.now();
       await spawnStageManager(sessionDir, projectRoot, runner, config, session, "update");
+      appendPerf(projectRoot, { role: "stage-manager/update", model: config.models["stage-manager"] ?? null, runner, durationMs: Date.now() - smUpdateStart, status: "success" });
       printRecentTimeline(sessionDir, 3);
 
       const nextIndex = session.currentTurnIndex + 1;

@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execa } from "execa";
-import { personaTemplateDir } from "./paths.js";
-import { appendLog } from "./logger.js";
+import { personaTemplateDir, officeRoot } from "./paths.js";
+import { appendLog, appendSessionLog, writePersonaLog } from "./logger.js";
 import { buildRunnerArgs, runnerBinary, type Runner } from "./runner.js";
 import type { Config } from "./config.js";
 
@@ -64,6 +64,13 @@ export function buildPersonaPrompt(role: PersonaRole, ctx: PersonaContext): stri
   return lines.join("\n");
 }
 
+function log(ctx: PersonaContext, source: string, message: string): void {
+  if (ctx.sessionDir) {
+    appendSessionLog(ctx.sessionDir, source, message);
+  }
+  appendLog(ctx.projectRoot, source, message);
+}
+
 export async function spawnPersona(
   role: PersonaRole,
   ctx: PersonaContext,
@@ -72,32 +79,33 @@ export async function spawnPersona(
 ): Promise<void> {
   const fullPrompt = buildPersonaPrompt(role, ctx);
   const bin = runnerBinary(runner);
+  const model = config.models[role] ?? null;
 
-  // Write the full prompt to a temp file to avoid OS command-line length
-  // limits and argument-quoting issues (especially on Windows).
-  const officeDir = path.join(ctx.projectRoot, ".office");
-  fs.mkdirSync(officeDir, { recursive: true });
-  const promptFile = path.join(officeDir, `.prompt-${role}-${Date.now()}.md`);
+  const promptsDir = path.join(officeRoot(ctx.projectRoot), "prompts");
+  fs.mkdirSync(promptsDir, { recursive: true });
+  const promptFile = path.join(promptsDir, `${role}-${Date.now()}.md`);
   fs.writeFileSync(promptFile, fullPrompt, "utf8");
 
   const shortPrompt =
     `Read the file at \`${promptFile}\` for your complete instructions.` +
     " Follow them exactly. Do NOT ask questions — act immediately.";
-  const args = buildRunnerArgs(runner, shortPrompt);
+  const args = buildRunnerArgs(runner, shortPrompt, model);
+  const fullCommand = `${bin} ${args.join(" ")}`;
 
-  const logDir = ctx.sessionDir ?? ctx.projectRoot;
-  const log = config.logging;
-
-  appendLog(logDir, "orchestrator", `spawning ${role}`);
-  if (log) {
-    console.log(`\n[office] spawning ${role}: ${bin} ${args.join(" ")}`);
+  log(ctx, "orchestrator", `spawning ${role} | runner=${runner} | model=${model ?? "default"} | cmd: ${fullCommand}`);
+  if (config.logging) {
+    console.log(`\n[office] spawning ${role}: ${fullCommand}`);
     console.log(`[office] prompt file: ${promptFile}`);
+    if (model) console.log(`[office] model: ${model}`);
   }
 
+  const startTime = Date.now();
+  let stdout = "";
+  let stderr = "";
+
   try {
-    const res = await execa(bin, args, {
+    const proc = execa(bin, args, {
       cwd: ctx.projectRoot,
-      stdio: "inherit",
       reject: false,
       timeout: config.timeouts.personaRunMs,
       env: {
@@ -107,22 +115,52 @@ export async function spawnPersona(
       },
     });
 
+    proc.stdout?.on("data", (chunk: Buffer) => {
+      const text = chunk.toString();
+      stdout += text;
+      process.stdout.write(text);
+    });
+
+    proc.stderr?.on("data", (chunk: Buffer) => {
+      const text = chunk.toString();
+      stderr += text;
+      process.stderr.write(text);
+    });
+
+    const res = await proc;
+    const durationMs = Date.now() - startTime;
+
+    const logFile = writePersonaLog(ctx.projectRoot, role, {
+      command: fullCommand,
+      exitCode: res.exitCode,
+      timedOut: res.timedOut,
+      stdout,
+      stderr,
+      durationMs,
+      model,
+      promptFile,
+    });
+
     if (res.timedOut) {
-      const msg = `${role} hit timeout (${config.timeouts.personaRunMs}ms); killed`;
-      appendLog(logDir, "orchestrator", msg);
+      const msg = `${role} hit timeout (${config.timeouts.personaRunMs}ms) after ${durationMs}ms; killed`;
+      log(ctx, "orchestrator", msg);
       console.error(`\n[office] ${msg}`);
+      console.error(`[office] full output log: ${logFile}`);
     } else if (res.exitCode !== 0) {
-      const msg = `${role} exited with code ${res.exitCode}`;
-      appendLog(logDir, "orchestrator", msg);
+      const msg = `${role} exited with code ${res.exitCode} after ${durationMs}ms | stdout=${stdout.length} bytes, stderr=${stderr.length} bytes`;
+      log(ctx, "orchestrator", msg);
       console.error(`\n[office] ${msg}`);
-      if (res.stderr) {
-        console.error(res.stderr);
+      console.error(`[office] full output log: ${logFile}`);
+    } else {
+      const msg = `${role} finished successfully in ${durationMs}ms | stdout=${stdout.length} bytes`;
+      log(ctx, "orchestrator", msg);
+      if (config.logging) {
+        console.log(`\n[office] ${msg}`);
+        console.log(`[office] full output log: ${logFile}`);
       }
-    } else if (log) {
-      console.log(`[office] ${role} finished successfully`);
     }
   } finally {
-    if (!log) {
+    if (!config.logging) {
       try { fs.unlinkSync(promptFile); } catch {}
     }
   }

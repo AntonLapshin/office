@@ -3,6 +3,13 @@ import path from "node:path";
 import { z } from "zod";
 import { officeRoot } from "./paths.js";
 
+const modelsSchema = z.object({
+  "stage-manager": z.string().nullable().default(null),
+  "character-agent": z.string().nullable().default(null),
+  "character-creator": z.string().nullable().default(null),
+  "space-creator": z.string().nullable().default(null),
+}).default({});
+
 const configSchema = z.object({
   runner: z.enum(["claude", "opencode"]).nullable().default("opencode"),
   logging: z.boolean().default(true),
@@ -12,6 +19,7 @@ const configSchema = z.object({
     })
     .default({}),
   maxRounds: z.number().int().default(50),
+  models: modelsSchema,
 });
 
 export type Config = z.infer<typeof configSchema>;
