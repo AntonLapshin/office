@@ -2,6 +2,8 @@
 
 Virtual office simulation powered by LLM personas. Create spaces, characters, and run interactive turn-based sessions where AI characters interact with each other — and optionally with you.
 
+Runs inside a Docker container so agents have full filesystem permissions and nothing touches your local project.
+
 ## How it works
 
 The tool uses Claude Code or OpenCode as LLM runners. Four persona types drive the simulation:
@@ -11,110 +13,86 @@ The tool uses Claude Code or OpenCode as LLM runners. Four persona types drive t
 - **Stage Manager** — narrates physical actions, enforces spatial rules, updates character states each turn
 - **Character Agent** — speaks as a specific character based on their personality and current state
 
+## Prerequisites
+
+- **Node.js >= 18**
+- **Docker** — the simulation runs inside a container
+
 ## Quick start
 
 ```bash
 # Install globally
 npm install -g .
 
-# Bootstrap in your project
-office install
+# Start the office container (builds the image on first run)
+office start
 
 # Create a space
-office new-space "An open-plan startup office with a kitchen, two phone booths, and a meeting room"
+office space create An open-plan startup office with a kitchen and a meeting room
 
 # Create characters
-office new-character "Dan, 31, Senior Engineer, introverted but friendly, loves coffee"
-office new-character "Boris, 26, Junior Developer, first day at the company, eager and nervous"
+office character create Dan, 31, Senior Engineer, introverted but friendly, loves coffee
+office character create Boris, 26, Junior Developer, first day at the company, eager and nervous
 
 # Start a session (you play as Dan)
-office start \
-  --space open-plan-startup-office \
+office session start \
+  --space open-plan-startup-office-with-a-kitchen-and-a-meeting-room \
   --characters dan,boris \
   --description "Dan is working at his desk when Boris enters for his first day" \
   --user dan
+
+# When done
+office stop
 ```
 
 ## CLI commands
 
-### `office install`
-
-Bootstraps the `.office/` directory structure and installs `/office:new_space` and `/office:new_character` slash commands for Claude Code and OpenCode.
+### Container lifecycle
 
 ```bash
-office install [--project-root <path>]
+office start       # Start container (builds image on first run, inits data on first start)
+office stop        # Stop container (data is preserved)
+office status      # Show whether the container is running
 ```
 
-Creates:
-```
-.office/
-├── config.json
-├── spaces/
-├── characters/
-└── sessions/
-```
-
-### `office new-space <description>`
-
-Spawns the Space Creator persona to generate a detailed space file.
+### Spaces
 
 ```bash
-office new-space "A cozy office with an open area and two meeting rooms"
-# -> .office/spaces/a-cozy-office-with-an-open-area-and-two-meeting-rooms.md
+office space create <description...>     # Generate a new space
+office space list                        # List all spaces
 ```
 
-The generated file includes room descriptions, an ASCII floor plan, and physical rules (adjacency, movement constraints) that the Stage Manager uses to enforce realism.
+The generated space file includes room descriptions, an ASCII floor plan, and physical rules (adjacency, movement constraints) that the Stage Manager uses to enforce realism.
 
-### `office new-character <description>`
-
-Spawns the Character Creator persona to generate a detailed character profile.
+### Characters
 
 ```bash
-office new-character "Jessica, 28, Product Designer, outgoing and opinionated"
-# -> .office/characters/jessica.md
+office character create <description...>  # Generate a new character
+office character list                     # List all characters
 ```
 
-The generated file includes background, personality, speech patterns, and relationship defaults.
+The generated character file includes background, personality, speech patterns, and relationship defaults.
 
-### `office start`
-
-Creates a new session and enters the turn-based simulation loop.
+### Sessions
 
 ```bash
-office start \
-  --space <name> \
-  --characters <name1>,<name2>[,...] \
-  [--description <text>] \
-  [--user <name>] \
-  [--runner claude|opencode]
+office session start [options]           # Create and run a new session
+office session continue <session_name>   # Resume a paused session
+office session list                      # List all sessions
 ```
+
+#### `office session start` options
 
 | Option | Description |
 |---|---|
-| `--space` | Name of a space file in `.office/spaces/` (without `.md`) |
-| `--characters` | Comma-separated character names from `.office/characters/` |
-| `--description` | Scene-setting description for the session |
-| `--user` | Which character you control (omit for fully autonomous simulation) |
-| `--runner` | Force `claude` or `opencode` (auto-detected by default) |
-
-### `office continue <session_name>`
-
-Resumes a paused session from where it left off.
-
-```bash
-office continue 2026-04-24-dan-is-working-at-his-desk
-```
-
-## Opencode / Claude Code commands
-
-After `office install`, two slash commands are available:
-
-- `/office:new_space <description>` — create a new space
-- `/office:new_character <description>` — create a new character
+| `--space <name>` | Name of a space (as shown by `office space list`) |
+| `--characters <names>` | Comma-separated character names |
+| `--description <text>` | Scene-setting description (default: "Office simulation") |
+| `--user <name>` | Which character you control (omit for fully autonomous) |
 
 ## Session structure
 
-Each session lives in `.office/sessions/<id>/` and contains:
+Each session is stored inside the container and contains:
 
 ```
 session.json          # Metadata, turn cursor, status
@@ -152,16 +130,38 @@ When it's your turn, type your speech at the prompt:
 
 - `Name: message` — address a specific character
 - Just a message — addresses everyone in the room
-- `/quit` — pause the session (resume later with `office continue`)
+- `/quit` — pause the session (resume later with `office session continue`)
 - Empty line — skip your turn
 
-## Configuration
+## Using OpenCode with local models
 
-`.office/config.json`:
+To use OpenCode with a local Ollama provider, create an `opencode.json` in the directory where you run `office start`. It will be mounted into the container automatically.
+
+Your `opencode.json` should use `host.docker.internal` instead of `localhost` to reach Ollama running on the host:
 
 ```json
 {
-  "runner": null,
+  "provider": {
+    "ollama": {
+      "apiBase": "http://host.docker.internal:11434"
+    }
+  }
+}
+```
+
+Set the runner via environment variable or config:
+
+```bash
+OFFICE_RUNNER=opencode office start
+```
+
+## Configuration
+
+The container stores its config at `.office/config.json` (inside the Docker volume):
+
+```json
+{
+  "runner": "opencode",
   "timeouts": {
     "personaRunMs": 600000
   },
@@ -171,9 +171,19 @@ When it's your turn, type your speech at the prompt:
 
 | Field | Default | Description |
 |---|---|---|
-| `runner` | `null` | Force `"claude"` or `"opencode"` (null = auto-detect) |
+| `runner` | `"opencode"` | Force `"claude"` or `"opencode"` (null = auto-detect) |
 | `timeouts.personaRunMs` | `600000` | Max time per persona invocation (ms) |
 | `maxRounds` | `50` | Safety limit for autonomous sessions |
+
+## Data persistence
+
+All data (spaces, characters, sessions) is stored in a Docker named volume called `office-data`. It persists across `office stop` / `office start` cycles and even if the container is removed.
+
+## Authentication
+
+**Claude Code**: Your `~/.claude` directory is mounted read-only into the container. If you're already logged in on the host, it works automatically. Alternatively, set `ANTHROPIC_API_KEY` in your environment before running `office start`.
+
+**OpenCode**: Place an `opencode.json` in your working directory (see above).
 
 ## Development
 
@@ -183,4 +193,11 @@ npm run build    # compile once
 npm run dev      # watch mode
 ```
 
-Requires Node.js >= 18 and either `claude` or `opencode` on PATH.
+To rebuild the Docker image after code changes:
+
+```bash
+office stop
+docker rm office-sim
+docker rmi office-sim:latest
+office start     # rebuilds from source
+```

@@ -9,7 +9,9 @@
   "files": [
     "dist",
     "src",
-    "tsconfig.json"
+    "tsconfig.json",
+    "Dockerfile",
+    ".dockerignore"
   ],
   "scripts": {
     "build": "tsc",
