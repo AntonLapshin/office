@@ -102,9 +102,16 @@ export async function spawnPersona(
     });
 
     if (res.timedOut) {
-      appendLog(logDir, "orchestrator", `${role} hit timeout (${config.timeouts.personaRunMs}ms); killed`);
+      const msg = `${role} hit timeout (${config.timeouts.personaRunMs}ms); killed`;
+      appendLog(logDir, "orchestrator", msg);
+      console.error(`\n[office] ${msg}`);
     } else if (res.exitCode !== 0) {
-      appendLog(logDir, "orchestrator", `${role} exited ${res.exitCode}`);
+      const msg = `${role} exited with code ${res.exitCode}`;
+      appendLog(logDir, "orchestrator", msg);
+      console.error(`\n[office] ${msg}`);
+      if (res.stderr) {
+        console.error(res.stderr);
+      }
     }
   } finally {
     try { fs.unlinkSync(promptFile); } catch {}

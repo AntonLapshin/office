@@ -57,6 +57,7 @@ character
     await ensureRunning();
     await dockerExec(
       ["office", "_exec", "new-character", description.join(" ")],
+      { interactive: true },
     );
   });
 
@@ -82,6 +83,7 @@ space
     await ensureRunning();
     await dockerExec(
       ["office", "_exec", "new-space", description.join(" ")],
+      { interactive: true },
     );
   });
 
