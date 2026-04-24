@@ -84,5 +84,5 @@ Valid `mood` values: neutral, happy, sad, angry, anxious, excited, bored, confus
 - Use the pre-loaded character states as baseline when writing updates — never generate state from scratch.
 - The character state JSON must remain valid against the schema. Use exact enum values for `mood`.
 - When adding memory entries, keep each summary under 20 words.
-- Limit memory to the 10 most recent entries per character. Drop oldest if needed.
+- Limit memory to the 100 most recent entries per character. Drop oldest if needed.
 - Timeline entries must start with `[Stage Manager]`.
