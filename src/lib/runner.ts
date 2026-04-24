@@ -18,8 +18,9 @@ export async function detectRunner(override?: string): Promise<Runner> {
 }
 
 async function onPath(bin: string): Promise<boolean> {
+  const cmd = process.platform === "win32" ? "where" : "which";
   try {
-    const res = await execa("which", [bin], { reject: false });
+    const res = await execa(cmd, [bin], { reject: false });
     return res.exitCode === 0 && res.stdout.trim().length > 0;
   } catch {
     return false;

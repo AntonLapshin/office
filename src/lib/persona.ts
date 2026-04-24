@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { execa } from "execa";
 import { personaTemplateDir } from "./paths.js";
@@ -70,28 +71,41 @@ export async function spawnPersona(
   runner: Runner,
   config: Config,
 ): Promise<void> {
-  const prompt = buildPersonaPrompt(role, ctx);
+  const fullPrompt = buildPersonaPrompt(role, ctx);
   const bin = runnerBinary(runner);
-  const args = buildRunnerArgs(runner, prompt);
+
+  // Write the full prompt to a temp file to avoid OS command-line length
+  // limits and argument-quoting issues (especially on Windows).
+  const promptFile = path.join(os.tmpdir(), `office-${role}-${Date.now()}.md`);
+  fs.writeFileSync(promptFile, fullPrompt, "utf8");
+
+  const shortPrompt =
+    `Read the file at \`${promptFile}\` for your complete instructions.` +
+    " Follow them exactly. Do NOT ask questions — act immediately.";
+  const args = buildRunnerArgs(runner, shortPrompt);
 
   const logDir = ctx.sessionDir ?? ctx.projectRoot;
   appendLog(logDir, "orchestrator", `spawning ${role}`);
 
-  const res = await execa(bin, args, {
-    cwd: ctx.projectRoot,
-    stdio: ["ignore", "inherit", "inherit"],
-    reject: false,
-    timeout: config.timeouts.personaRunMs,
-    env: {
-      ...process.env,
-      OFFICE_ROLE: role,
-      ...(ctx.sessionDir ? { OFFICE_SESSION: ctx.sessionDir } : {}),
-    },
-  });
+  try {
+    const res = await execa(bin, args, {
+      cwd: ctx.projectRoot,
+      stdio: ["ignore", "inherit", "inherit"],
+      reject: false,
+      timeout: config.timeouts.personaRunMs,
+      env: {
+        ...process.env,
+        OFFICE_ROLE: role,
+        ...(ctx.sessionDir ? { OFFICE_SESSION: ctx.sessionDir } : {}),
+      },
+    });
 
-  if (res.timedOut) {
-    appendLog(logDir, "orchestrator", `${role} hit timeout (${config.timeouts.personaRunMs}ms); killed`);
-  } else if (res.exitCode !== 0) {
-    appendLog(logDir, "orchestrator", `${role} exited ${res.exitCode}`);
+    if (res.timedOut) {
+      appendLog(logDir, "orchestrator", `${role} hit timeout (${config.timeouts.personaRunMs}ms); killed`);
+    } else if (res.exitCode !== 0) {
+      appendLog(logDir, "orchestrator", `${role} exited ${res.exitCode}`);
+    }
+  } finally {
+    try { fs.unlinkSync(promptFile); } catch {}
   }
 }
