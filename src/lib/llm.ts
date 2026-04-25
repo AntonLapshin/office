@@ -189,10 +189,12 @@ export async function callLlm(opts: LlmCallOptions): Promise<string> {
   throw new Error(`${opts.role} failed after ${opts.config.retries} attempts: ${lastError?.message}`);
 }
 
-function stripCodeFences(text: string): string {
-  const fenced = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+function stripLlmWrapping(text: string): string {
+  let cleaned = text.replace(/<thought>[\s\S]*?<\/thought>/gi, "").trim();
+  cleaned = cleaned.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim();
+  const fenced = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
   if (fenced) return fenced[1].trim();
-  return text.trim();
+  return cleaned.trim();
 }
 
 export async function callLlmJson<T>(opts: LlmJsonCallOptions<T>): Promise<T> {
@@ -211,7 +213,7 @@ export async function callLlmJson<T>(opts: LlmJsonCallOptions<T>): Promise<T> {
     try {
       const raw = await fetchCompletion(provider, apiKey, model, systemPrompt, opts.userPrompt, opts.config.timeoutMs);
       const durationMs = Date.now() - start;
-      const cleaned = stripCodeFences(raw);
+      const cleaned = stripLlmWrapping(raw);
       const parsed = JSON.parse(cleaned);
       const validated = opts.schema.parse(parsed);
 

@@ -19,7 +19,7 @@ For each character, determine based on the timeline:
 - Should they move to another room? Update location and currentAction.
 - How does recent speech or action affect their mood?
 - New impressions of others? Update relationships.
-- Were any intents resolved? Create new ones?
+- Were any intents resolved? Add new ones as short strings?
 - Add a short memory string if the character witnessed something notable.
 
 Valid mood values: neutral, happy, sad, angry, anxious, excited, bored, confused, focused, relaxed

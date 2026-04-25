@@ -6,19 +6,12 @@ export const moodSchema = z.enum([
 ]);
 export type Mood = z.infer<typeof moodSchema>;
 
-export const intentSchema = z.object({
-  description: z.string(),
-  priority: z.enum(["low", "medium", "high"]).default("medium"),
-  resolved: z.boolean().default(false),
-});
-export type Intent = z.infer<typeof intentSchema>;
-
 export const characterStateSchema = z.object({
   name: z.string().min(1),
   location: z.string(),
   mood: moodSchema.default("neutral"),
   currentAction: z.string().default("standing"),
-  intents: z.array(intentSchema).default([]),
+  intents: z.array(z.string()).default([]),
   memory: z.array(z.string()).default([]),
   relationships: z.record(z.string(), z.string()).default({}),
   updatedAt: z.string().default(() => new Date().toISOString()),
