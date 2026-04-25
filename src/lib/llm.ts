@@ -1,5 +1,6 @@
 import type { z } from "zod";
-import type { Config } from "./config.js";
+import type { Config, Provider } from "./config.js";
+import { resolveProvider } from "./config.js";
 import type { PersonaRole } from "./persona.js";
 import { appendLog, appendSessionLog, appendPerf, appendLlmLog } from "./logger.js";
 
@@ -16,8 +17,17 @@ export interface LlmJsonCallOptions<T> extends LlmCallOptions {
   schema: z.ZodSchema<T>;
 }
 
-function resolveModel(config: Config, role: PersonaRole): string {
-  return config.models[role] ?? config.defaultModel;
+function resolveModel(config: Config, provider: Provider, role: PersonaRole): string {
+  return config.models[role] ?? provider.defaultModel;
+}
+
+function resolveApiKey(provider: Provider): string | undefined {
+  if (!provider.apiKeyEnv) return undefined;
+  const key = process.env[provider.apiKeyEnv];
+  if (!key) {
+    throw new Error(`API key env var "${provider.apiKeyEnv}" is not set`);
+  }
+  return key;
 }
 
 function delay(ms: number): Promise<void> {
@@ -31,27 +41,32 @@ function log(opts: LlmCallOptions, source: string, message: string): void {
   appendLog(opts.projectRoot, source, message);
 }
 
-async function fetchCompletion(
-  config: Config,
+async function fetchOpenAI(
+  provider: Provider,
+  apiKey: string | undefined,
   model: string,
   systemPrompt: string,
   userPrompt: string,
+  timeoutMs: number,
 ): Promise<string> {
-  const url = `${config.provider.baseUrl}/v1/chat/completions`;
-  const body = {
-    model,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ],
-    stream: false,
-  };
+  const url = `${provider.baseUrl}/v1/chat/completions`;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (apiKey) {
+    headers["Authorization"] = `Bearer ${apiKey}`;
+  }
 
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(config.timeoutMs),
+    headers,
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      stream: false,
+    }),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (!response.ok) {
@@ -64,15 +79,71 @@ async function fetchCompletion(
   };
 
   const content = json.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error("Empty response from LLM");
-  }
-
+  if (!content) throw new Error("Empty response from LLM");
   return content;
 }
 
+async function fetchAnthropic(
+  provider: Provider,
+  apiKey: string | undefined,
+  model: string,
+  systemPrompt: string,
+  userPrompt: string,
+  timeoutMs: number,
+): Promise<string> {
+  const url = `${provider.baseUrl}/v1/messages`;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "anthropic-version": "2023-06-01",
+  };
+  if (apiKey) {
+    headers["x-api-key"] = apiKey;
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      model,
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userPrompt }],
+    }),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`HTTP ${response.status}: ${text}`);
+  }
+
+  const json = await response.json() as {
+    content?: { type: string; text?: string }[];
+  };
+
+  const text = json.content?.find((b) => b.type === "text")?.text;
+  if (!text) throw new Error("Empty response from LLM");
+  return text;
+}
+
+async function fetchCompletion(
+  provider: Provider,
+  apiKey: string | undefined,
+  model: string,
+  systemPrompt: string,
+  userPrompt: string,
+  timeoutMs: number,
+): Promise<string> {
+  if (provider.api === "anthropic") {
+    return fetchAnthropic(provider, apiKey, model, systemPrompt, userPrompt, timeoutMs);
+  }
+  return fetchOpenAI(provider, apiKey, model, systemPrompt, userPrompt, timeoutMs);
+}
+
 export async function callLlm(opts: LlmCallOptions): Promise<string> {
-  const model = resolveModel(opts.config, opts.role);
+  const provider = resolveProvider(opts.config);
+  const apiKey = resolveApiKey(provider);
+  const model = resolveModel(opts.config, provider, opts.role);
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= opts.config.retries; attempt++) {
@@ -82,7 +153,7 @@ export async function callLlm(opts: LlmCallOptions): Promise<string> {
 
     const start = Date.now();
     try {
-      const response = await fetchCompletion(opts.config, model, opts.systemPrompt, opts.userPrompt);
+      const response = await fetchCompletion(provider, apiKey, model, opts.systemPrompt, opts.userPrompt, opts.config.timeoutMs);
       const durationMs = Date.now() - start;
 
       log(opts, opts.role, `success | model=${model} | attempt=${attempt}/${opts.config.retries} | ${durationMs}ms`);
@@ -125,7 +196,9 @@ function stripCodeFences(text: string): string {
 }
 
 export async function callLlmJson<T>(opts: LlmJsonCallOptions<T>): Promise<T> {
-  const model = resolveModel(opts.config, opts.role);
+  const provider = resolveProvider(opts.config);
+  const apiKey = resolveApiKey(provider);
+  const model = resolveModel(opts.config, provider, opts.role);
   let lastError: Error | null = null;
   const systemPrompt = opts.systemPrompt + "\n\nRespond with valid JSON only, no markdown fences.";
 
@@ -136,7 +209,7 @@ export async function callLlmJson<T>(opts: LlmJsonCallOptions<T>): Promise<T> {
 
     const start = Date.now();
     try {
-      const raw = await fetchCompletion(opts.config, model, systemPrompt, opts.userPrompt);
+      const raw = await fetchCompletion(provider, apiKey, model, systemPrompt, opts.userPrompt, opts.config.timeoutMs);
       const durationMs = Date.now() - start;
       const cleaned = stripCodeFences(raw);
       const parsed = JSON.parse(cleaned);

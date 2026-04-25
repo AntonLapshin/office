@@ -3,6 +3,15 @@ import path from "node:path";
 import { z } from "zod";
 import { officeRoot } from "./paths.js";
 
+const providerSchema = z.object({
+  api: z.enum(["openai", "anthropic"]).default("openai"),
+  baseUrl: z.string(),
+  apiKeyEnv: z.string().optional(),
+  defaultModel: z.string(),
+});
+
+export type Provider = z.infer<typeof providerSchema>;
+
 const modelsSchema = z.object({
   "stage-manager": z.string().nullable().default(null),
   "character-agent": z.string().nullable().default(null),
@@ -11,10 +20,14 @@ const modelsSchema = z.object({
 }).default({});
 
 const configSchema = z.object({
-  provider: z.object({
-    baseUrl: z.string().default("http://localhost:11434"),
-  }).default({}),
-  defaultModel: z.string().default("llama3.2"),
+  provider: z.string().default("ollama"),
+  providers: z.record(z.string(), providerSchema).default({
+    ollama: {
+      api: "openai",
+      baseUrl: "http://localhost:11434",
+      defaultModel: "llama3.2",
+    },
+  }),
   models: modelsSchema,
   logging: z.boolean().default(true),
   maxRounds: z.number().int().default(50),
@@ -24,6 +37,14 @@ const configSchema = z.object({
 });
 
 export type Config = z.infer<typeof configSchema>;
+
+export function resolveProvider(config: Config): Provider {
+  const p = config.providers[config.provider];
+  if (!p) {
+    throw new Error(`Provider "${config.provider}" not found in providers: ${Object.keys(config.providers).join(", ")}`);
+  }
+  return p;
+}
 
 export function readConfig(projectRoot: string): Config {
   const file = path.join(officeRoot(projectRoot), "config.json");

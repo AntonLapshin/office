@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
+import { loadEnv } from "./lib/env.js";
 import { runInit } from "./commands/init.js";
 import { runNewSpace } from "./commands/new-space.js";
 import { runNewCharacter } from "./commands/new-character.js";
@@ -8,6 +9,8 @@ import { runContinue } from "./commands/continue.js";
 import { runList, type ListTarget } from "./commands/list.js";
 
 const program = new Command();
+
+loadEnv(process.cwd());
 
 program
   .name("office")
