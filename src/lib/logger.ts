@@ -26,71 +26,71 @@ export function appendPerf(
   projectRoot: string,
   entry: {
     role: string;
-    model: string | null;
-    runner: string;
+    model: string;
     durationMs: number;
     status: "success" | "error" | "timeout";
+    attempt: number;
+    error?: string;
   },
 ): void {
   const ts = new Date().toISOString();
-  const model = entry.model ?? "default";
   const secs = (entry.durationMs / 1000).toFixed(1);
-  const line = `${ts} | ${entry.role.padEnd(24)} | ${entry.runner.padEnd(8)} | model=${model.padEnd(30)} | ${secs}s | ${entry.status}\n`;
+  let line = `${ts} | ${entry.role.padEnd(24)} | model=${entry.model.padEnd(20)} | ${secs}s | attempt ${entry.attempt} | ${entry.status}`;
+  if (entry.error) {
+    line += ` | ${entry.error}`;
+  }
+  line += "\n";
   const perfFile = path.join(officeRoot(projectRoot), "performance.txt");
   fs.mkdirSync(path.dirname(perfFile), { recursive: true });
   fs.appendFileSync(perfFile, line, "utf8");
 }
 
-export function writePersonaLog(
+export function appendLlmLog(
   projectRoot: string,
-  role: string,
   data: {
-    command: string;
-    exitCode: number | undefined;
-    timedOut: boolean;
-    stdout: string;
-    stderr: string;
+    role: string;
+    model: string;
     durationMs: number;
-    model?: string | null;
-    promptFile?: string;
+    status: "success" | "error";
+    attempt: number;
+    systemPrompt: string;
+    userPrompt: string;
+    response: string;
+    error?: string;
   },
-): string {
+): void {
   const dir = logsDir(projectRoot);
   fs.mkdirSync(dir, { recursive: true });
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
-  const logFile = path.join(dir, `${role}-${ts}.log`);
+  const logFile = path.join(dir, `${data.role}-${ts}.log`);
 
   const lines = [
-    `=== Persona Run: ${role} ===`,
+    `=== LLM Call: ${data.role} ===`,
     `Timestamp: ${new Date().toISOString()}`,
-    `Command: ${data.command}`,
-    `Model: ${data.model ?? "default"}`,
-    `Exit code: ${data.exitCode ?? "unknown"}`,
-    `Timed out: ${data.timedOut}`,
+    `Model: ${data.model}`,
     `Duration: ${data.durationMs}ms`,
-    "",
+    `Status: ${data.status}`,
+    `Attempt: ${data.attempt}`,
   ];
 
-  if (data.promptFile) {
-    lines.push(`Prompt file: ${data.promptFile}`);
-    try {
-      const prompt = fs.readFileSync(data.promptFile, "utf8");
-      lines.push("--- Prompt content ---", prompt, "--- End prompt ---", "");
-    } catch {
-      lines.push("(prompt file not found — already cleaned up)", "");
-    }
+  if (data.error) {
+    lines.push(`Error: ${data.error}`);
   }
 
-  if (data.stdout) {
-    lines.push("--- STDOUT ---", data.stdout, "--- End STDOUT ---", "");
-  } else {
-    lines.push("--- STDOUT --- (empty)", "");
-  }
-
-  if (data.stderr) {
-    lines.push("--- STDERR ---", data.stderr, "--- End STDERR ---", "");
-  }
+  lines.push(
+    "",
+    "--- System Prompt ---",
+    data.systemPrompt,
+    "--- End System Prompt ---",
+    "",
+    "--- User Prompt ---",
+    data.userPrompt,
+    "--- End User Prompt ---",
+    "",
+    "--- Response ---",
+    data.response || "(empty)",
+    "--- End Response ---",
+  );
 
   fs.writeFileSync(logFile, lines.join("\n"), "utf8");
-  return logFile;
 }

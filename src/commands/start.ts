@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spacesDir, charactersDir, sessionsDir, sessionDirName, capitalize } from "../lib/paths.js";
-import { writeSession } from "../lib/session-io.js";
-import { writeCharacterState } from "../lib/session-io.js";
+import { writeSession, writeCharacterState } from "../lib/session-io.js";
+import { appendTimeline } from "../lib/timeline.js";
 import { runSessionLoop } from "../lib/session-loop.js";
 import type { Session, CharacterState } from "../lib/schema.js";
 
@@ -11,7 +11,6 @@ export interface StartOptions {
   characters: string;
   description?: string;
   user?: string;
-  runner?: string;
   projectRoot?: string;
 }
 
@@ -22,7 +21,7 @@ export async function runStart(opts: StartOptions): Promise<void> {
   const description = opts.description ?? "Office simulation";
   const userCharacter = opts.user ? capitalize(opts.user.trim().toLowerCase()) : null;
 
-  const spaceFile = path.join(spacesDir(projectRoot), `${spaceName}.md`);
+  const spaceFile = path.join(spacesDir(projectRoot), `${spaceName}.txt`);
   if (!fs.existsSync(spaceFile)) {
     console.error(`Space not found: ${spaceFile}`);
     console.error(`Available spaces: ${listFiles(spacesDir(projectRoot))}`);
@@ -30,7 +29,7 @@ export async function runStart(opts: StartOptions): Promise<void> {
   }
 
   for (const name of characterNames) {
-    const charFile = path.join(charactersDir(projectRoot), `${name}.md`);
+    const charFile = path.join(charactersDir(projectRoot), `${name}.txt`);
     if (!fs.existsSync(charFile)) {
       console.error(`Character not found: ${charFile}`);
       console.error(`Available characters: ${listFiles(charactersDir(projectRoot))}`);
@@ -47,11 +46,11 @@ export async function runStart(opts: StartOptions): Promise<void> {
   const sessionDir = path.join(sessionsDir(projectRoot), sessionId);
   fs.mkdirSync(sessionDir, { recursive: true });
 
-  fs.copyFileSync(spaceFile, path.join(sessionDir, `${spaceName}.md`));
+  fs.copyFileSync(spaceFile, path.join(sessionDir, `${spaceName}.txt`));
 
   for (const name of characterNames) {
-    const src = path.join(charactersDir(projectRoot), `${name}.md`);
-    fs.copyFileSync(src, path.join(sessionDir, `${name}.md`));
+    const src = path.join(charactersDir(projectRoot), `${name}.txt`);
+    fs.copyFileSync(src, path.join(sessionDir, `${name}.txt`));
   }
 
   const firstRoom = extractFirstRoom(spaceFile);
@@ -78,6 +77,7 @@ export async function runStart(opts: StartOptions): Promise<void> {
   }
 
   fs.writeFileSync(path.join(sessionDir, "timeline.log"), "", "utf8");
+  appendTimeline(sessionDir, `[Stage Manager] ${description}`);
 
   const session: Session = {
     id: sessionId,
@@ -88,7 +88,7 @@ export async function runStart(opts: StartOptions): Promise<void> {
     status: "active",
     currentRound: 0,
     currentTurnIndex: 0,
-    turnPhase: "stage-manager-init",
+    turnPhase: "character-turn",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -102,22 +102,29 @@ export async function runStart(opts: StartOptions): Promise<void> {
   }
   console.log("");
 
-  await runSessionLoop(sessionDir, {
-    runner: opts.runner,
-    projectRoot,
-  });
+  await runSessionLoop(sessionDir, { projectRoot });
 }
 
 function extractFirstRoom(spaceFile: string): string {
   const content = fs.readFileSync(spaceFile, "utf8");
-  const match = content.match(/^###\s+(.+)$/m);
-  if (match) return match[1].trim();
+  // Plain text format: look for room names under ROOMS section
+  // Rooms are listed as "- Name" lines or as standalone capitalized lines
+  const roomsMatch = content.match(/^ROOMS\s*\n([\s\S]*?)(?=^[A-Z]{2,}|\Z)/m);
+  if (roomsMatch) {
+    const roomLine = roomsMatch[1].match(/^\s*-\s*(.+)/m);
+    if (roomLine) return roomLine[1].trim();
+    const namedLine = roomsMatch[1].match(/^\s*(\w[\w\s]+\w)\s*$/m);
+    if (namedLine) return namedLine[1].trim();
+  }
+  // Fallback: look for markdown heading (backward compat)
+  const mdMatch = content.match(/^###\s+(.+)$/m);
+  if (mdMatch) return mdMatch[1].trim();
   return "main room";
 }
 
 function listFiles(dir: string): string {
   if (!fs.existsSync(dir)) return "(none)";
-  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".md"));
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".txt"));
   if (files.length === 0) return "(none)";
-  return files.map((f) => f.replace(".md", "")).join(", ");
+  return files.map((f) => f.replace(".txt", "")).join(", ");
 }

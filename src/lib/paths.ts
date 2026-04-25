@@ -14,10 +14,6 @@ export function templateDir(): string {
   return path.join(root, "templates");
 }
 
-export function commandTemplateDir(): string {
-  return path.join(templateDir(), "commands");
-}
-
 export function personaTemplateDir(): string {
   return path.join(templateDir(), "personas");
 }

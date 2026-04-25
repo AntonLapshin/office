@@ -13,29 +13,28 @@ export const intentSchema = z.object({
 });
 export type Intent = z.infer<typeof intentSchema>;
 
-export const memoryEntrySchema = z.object({
-  round: z.number().int(),
-  summary: z.string(),
-});
-export type MemoryEntry = z.infer<typeof memoryEntrySchema>;
-
 export const characterStateSchema = z.object({
   name: z.string().min(1),
   location: z.string(),
   mood: moodSchema.default("neutral"),
   currentAction: z.string().default("standing"),
   intents: z.array(intentSchema).default([]),
-  memory: z.array(memoryEntrySchema).default([]),
+  memory: z.array(z.string()).default([]),
   relationships: z.record(z.string(), z.string()).default({}),
   updatedAt: z.string().default(() => new Date().toISOString()),
 });
 export type CharacterState = z.infer<typeof characterStateSchema>;
 
+export const stageManagerResponseSchema = z.object({
+  narration: z.string(),
+  characters: z.record(z.string(), characterStateSchema),
+});
+export type StageManagerResponse = z.infer<typeof stageManagerResponseSchema>;
+
 export const sessionStatusSchema = z.enum(["active", "paused", "ended"]);
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 
 export const turnPhaseSchema = z.enum([
-  "stage-manager-init",
   "character-turn",
   "stage-manager-update",
 ]);
@@ -50,7 +49,7 @@ export const sessionSchema = z.object({
   status: sessionStatusSchema.default("active"),
   currentRound: z.number().int().default(0),
   currentTurnIndex: z.number().int().default(0),
-  turnPhase: turnPhaseSchema.default("stage-manager-init"),
+  turnPhase: turnPhaseSchema.default("character-turn"),
   createdAt: z.string().default(() => new Date().toISOString()),
   updatedAt: z.string().default(() => new Date().toISOString()),
 });

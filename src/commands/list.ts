@@ -8,10 +8,10 @@ export type ListTarget = "spaces" | "characters" | "sessions";
 export function runList(target: ListTarget, projectRoot: string): void {
   switch (target) {
     case "spaces":
-      listMarkdownFiles(spacesDir(projectRoot), "spaces");
+      listTextFiles(spacesDir(projectRoot), "spaces");
       break;
     case "characters":
-      listMarkdownFiles(charactersDir(projectRoot), "characters");
+      listTextFiles(charactersDir(projectRoot), "characters");
       break;
     case "sessions":
       listSessions(projectRoot);
@@ -19,18 +19,18 @@ export function runList(target: ListTarget, projectRoot: string): void {
   }
 }
 
-function listMarkdownFiles(dir: string, label: string): void {
+function listTextFiles(dir: string, label: string): void {
   if (!fs.existsSync(dir)) {
     console.log(`No ${label} found.`);
     return;
   }
-  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".md"));
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".txt"));
   if (files.length === 0) {
     console.log(`No ${label} found.`);
     return;
   }
   for (const file of files) {
-    console.log(`  ${file.replace(".md", "")}`);
+    console.log(`  ${file.replace(".txt", "")}`);
   }
 }
 

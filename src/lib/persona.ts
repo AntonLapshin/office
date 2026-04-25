@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { execa } from "execa";
-import { personaTemplateDir, officeRoot } from "./paths.js";
-import { appendLog, appendSessionLog, writePersonaLog } from "./logger.js";
-import { buildRunnerArgs, runnerBinary, type Runner } from "./runner.js";
+import { personaTemplateDir } from "./paths.js";
+import { callLlm, callLlmJson } from "./llm.js";
+import { readCharacterState, writeCharacterState } from "./session-io.js";
+import { appendTimeline, readRecentTimeline } from "./timeline.js";
+import { characterStateSchema, stageManagerResponseSchema, type Session } from "./schema.js";
 import type { Config } from "./config.js";
 
 export type PersonaRole =
@@ -12,156 +13,145 @@ export type PersonaRole =
   | "stage-manager"
   | "character-agent";
 
-export interface PersonaContext {
-  sessionDir?: string;
-  projectRoot: string;
-  extraContext?: Record<string, string>;
-  embeddedFiles?: Record<string, string>;
+function readTemplate(role: PersonaRole): string {
+  return fs.readFileSync(path.join(personaTemplateDir(), `${role}.txt`), "utf8");
 }
 
-export function buildPersonaPrompt(role: PersonaRole, ctx: PersonaContext): string {
-  const template = fs.readFileSync(
-    path.join(personaTemplateDir(), `${role}.md`),
-    "utf8",
-  );
-
-  const lines = [template.trim(), "", "## Session context"];
-  lines.push(`- Project root: \`${ctx.projectRoot}\``);
-
-  if (ctx.sessionDir) {
-    lines.push(`- Session directory: \`${ctx.sessionDir}\``);
-  }
-
-  if (ctx.extraContext) {
-    for (const [key, value] of Object.entries(ctx.extraContext)) {
-      lines.push(`- ${key}: \`${value}\``);
-    }
-  }
-
-  if (ctx.embeddedFiles && Object.keys(ctx.embeddedFiles).length > 0) {
-    lines.push("", "## Pre-loaded context", "");
-    lines.push(
-      "All files below are pre-loaded. Use this content directly — do **not** re-read these files from disk. When you need to write back to a file, use the path from Session context above.",
-    );
-    lines.push("");
-    for (const [label, filePath] of Object.entries(ctx.embeddedFiles)) {
-      const ext = path.extname(filePath).slice(1) || "text";
-      try {
-        const content = fs.readFileSync(filePath, "utf8");
-        lines.push(`### ${label}`);
-        lines.push("```" + ext);
-        lines.push(content.trimEnd() || "(empty)");
-        lines.push("```");
-        lines.push("");
-      } catch {
-        lines.push(`### ${label}`);
-        lines.push("(file not found)");
-        lines.push("");
-      }
-    }
-  }
-
-  return lines.join("\n");
-}
-
-function log(ctx: PersonaContext, source: string, message: string): void {
-  if (ctx.sessionDir) {
-    appendSessionLog(ctx.sessionDir, source, message);
-  }
-  appendLog(ctx.projectRoot, source, message);
-}
-
-export async function spawnPersona(
-  role: PersonaRole,
-  ctx: PersonaContext,
-  runner: Runner,
-  config: Config,
-): Promise<void> {
-  const fullPrompt = buildPersonaPrompt(role, ctx);
-  const bin = runnerBinary(runner);
-  const model = config.models[role] ?? null;
-
-  const promptsDir = path.join(officeRoot(ctx.projectRoot), "prompts");
-  fs.mkdirSync(promptsDir, { recursive: true });
-  const promptFile = path.join(promptsDir, `${role}-${Date.now()}.md`);
-  fs.writeFileSync(promptFile, fullPrompt, "utf8");
-
-  const shortPrompt =
-    `Read the file at \`${promptFile}\` for your complete instructions.` +
-    " Follow them exactly. Do NOT ask questions — act immediately.";
-  const args = buildRunnerArgs(runner, shortPrompt, model);
-  const fullCommand = `${bin} ${args.join(" ")}`;
-
-  log(ctx, "orchestrator", `spawning ${role} | runner=${runner} | model=${model ?? "default"} | cmd: ${fullCommand}`);
-  if (config.logging) {
-    console.log(`\n[office] spawning ${role}: ${fullCommand}`);
-    console.log(`[office] prompt file: ${promptFile}`);
-    if (model) console.log(`[office] model: ${model}`);
-  }
-
-  const startTime = Date.now();
-  let stdout = "";
-  let stderr = "";
-
+function readFileOrEmpty(filePath: string): string {
   try {
-    const proc = execa(bin, args, {
-      cwd: ctx.projectRoot,
-      reject: false,
-      timeout: config.timeouts.personaRunMs,
-      env: {
-        ...process.env,
-        OFFICE_ROLE: role,
-        ...(ctx.sessionDir ? { OFFICE_SESSION: ctx.sessionDir } : {}),
-      },
-    });
+    return fs.readFileSync(filePath, "utf8").trim();
+  } catch {
+    return "(not found)";
+  }
+}
 
-    proc.stdout?.on("data", (chunk: Buffer) => {
-      const text = chunk.toString();
-      stdout += text;
-      process.stdout.write(text);
-    });
+export async function runSpaceCreator(
+  description: string,
+  outputPath: string,
+  config: Config,
+  projectRoot: string,
+): Promise<void> {
+  const systemPrompt = readTemplate("space-creator");
+  const userPrompt = `Create a space: ${description}`;
 
-    proc.stderr?.on("data", (chunk: Buffer) => {
-      const text = chunk.toString();
-      stderr += text;
-      process.stderr.write(text);
-    });
+  const response = await callLlm({
+    config, role: "space-creator", systemPrompt, userPrompt, projectRoot,
+  });
 
-    const res = await proc;
-    const durationMs = Date.now() - startTime;
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, response.trim() + "\n", "utf8");
+}
 
-    const logFile = writePersonaLog(ctx.projectRoot, role, {
-      command: fullCommand,
-      exitCode: res.exitCode,
-      timedOut: res.timedOut,
-      stdout,
-      stderr,
-      durationMs,
-      model,
-      promptFile,
-    });
+export async function runCharacterCreator(
+  description: string,
+  name: string,
+  outputPath: string,
+  existingCharacterSummaries: string[],
+  config: Config,
+  projectRoot: string,
+): Promise<void> {
+  const systemPrompt = readTemplate("character-creator");
+  let userPrompt = `Create a character: ${description}\nName: ${name}`;
 
-    if (res.timedOut) {
-      const msg = `${role} hit timeout (${config.timeouts.personaRunMs}ms) after ${durationMs}ms; killed`;
-      log(ctx, "orchestrator", msg);
-      console.error(`\n[office] ${msg}`);
-      console.error(`[office] full output log: ${logFile}`);
-    } else if (res.exitCode !== 0) {
-      const msg = `${role} exited with code ${res.exitCode} after ${durationMs}ms | stdout=${stdout.length} bytes, stderr=${stderr.length} bytes`;
-      log(ctx, "orchestrator", msg);
-      console.error(`\n[office] ${msg}`);
-      console.error(`[office] full output log: ${logFile}`);
-    } else {
-      const msg = `${role} finished successfully in ${durationMs}ms | stdout=${stdout.length} bytes`;
-      log(ctx, "orchestrator", msg);
-      if (config.logging) {
-        console.log(`\n[office] ${msg}`);
-        console.log(`[office] full output log: ${logFile}`);
-      }
+  if (existingCharacterSummaries.length > 0) {
+    userPrompt += "\n\nExisting characters for reference:\n" + existingCharacterSummaries.join("\n");
+  }
+
+  const response = await callLlm({
+    config, role: "character-creator", systemPrompt, userPrompt, projectRoot,
+  });
+
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, response.trim() + "\n", "utf8");
+}
+
+export async function runCharacterAgent(
+  characterName: string,
+  sessionDir: string,
+  session: Session,
+  config: Config,
+  projectRoot: string,
+): Promise<string> {
+  const systemPrompt = readTemplate("character-agent");
+
+  const charDesc = readFileOrEmpty(path.join(sessionDir, `${characterName}.txt`));
+  const charState = readFileOrEmpty(path.join(sessionDir, `${characterName}.json`));
+  const spaceDesc = readFileOrEmpty(path.join(sessionDir, `${session.spaceName}.txt`));
+  const timeline = readRecentTimeline(sessionDir, 50).join("\n");
+
+  const otherStates: string[] = [];
+  for (const name of session.characters) {
+    if (name !== characterName) {
+      const state = readCharacterState(sessionDir, name);
+      otherStates.push(`${name}: location=${state.location}, mood=${state.mood}, action=${state.currentAction}`);
     }
-  } finally {
-    if (!config.logging) {
-      try { fs.unlinkSync(promptFile); } catch {}
+  }
+
+  const userPrompt = [
+    `You are: ${characterName}`,
+    "",
+    "YOUR CHARACTER DESCRIPTION:",
+    charDesc,
+    "",
+    "YOUR CURRENT STATE:",
+    charState,
+    "",
+    "SPACE:",
+    spaceDesc,
+    "",
+    "OTHER CHARACTERS IN SIMULATION:",
+    otherStates.length > 0 ? otherStates.join("\n") : "(none)",
+    "",
+    "RECENT TIMELINE:",
+    timeline || "(empty)",
+  ].join("\n");
+
+  const response = await callLlm({
+    config, role: "character-agent", systemPrompt, userPrompt, projectRoot, sessionDir,
+  });
+
+  const speechLine = response.trim().split("\n")[0].trim();
+  appendTimeline(sessionDir, speechLine);
+  return speechLine;
+}
+
+export async function runStageManager(
+  sessionDir: string,
+  session: Session,
+  config: Config,
+  projectRoot: string,
+): Promise<void> {
+  const systemPrompt = readTemplate("stage-manager");
+
+  const spaceDesc = readFileOrEmpty(path.join(sessionDir, `${session.spaceName}.txt`));
+  const timeline = readRecentTimeline(sessionDir, 50).join("\n");
+
+  const characters: Record<string, unknown> = {};
+  for (const name of session.characters) {
+    characters[name] = readCharacterState(sessionDir, name);
+  }
+
+  const inputJson = { space: spaceDesc, characters, timeline };
+  const userPrompt = JSON.stringify(inputJson, null, 2);
+
+  const result = await callLlmJson({
+    config, role: "stage-manager", systemPrompt, userPrompt, projectRoot, sessionDir,
+    schema: stageManagerResponseSchema,
+  });
+
+  for (const name of session.characters) {
+    const raw = result.characters[name];
+    if (raw) {
+      const updated = characterStateSchema.parse({ ...raw, updatedAt: new Date().toISOString() });
+      writeCharacterState(sessionDir, name, updated);
+    }
+  }
+
+  if (result.narration && result.narration.trim().length > 0) {
+    for (const line of result.narration.trim().split("\n")) {
+      if (line.trim()) {
+        appendTimeline(sessionDir, `[Stage Manager] ${line.trim()}`);
+      }
     }
   }
 }

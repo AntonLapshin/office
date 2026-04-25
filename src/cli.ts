@@ -1,10 +1,5 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { ensureRunning, dockerExec } from "./lib/docker.js";
-import { runStartDocker } from "./commands/start-docker.js";
-import { runStopDocker } from "./commands/stop-docker.js";
-import { runRestartDocker } from "./commands/restart-docker.js";
-import { runStatusDocker } from "./commands/status-docker.js";
 import { runInit } from "./commands/init.js";
 import { runNewSpace } from "./commands/new-space.js";
 import { runNewCharacter } from "./commands/new-character.js";
@@ -19,36 +14,12 @@ program
   .description("Virtual office simulation powered by LLM personas")
   .version("0.1.0");
 
-// ---------------------------------------------------------------------------
-// Host-side commands (delegate to Docker container)
-// ---------------------------------------------------------------------------
-
 program
-  .command("start")
-  .description("Start the office container (builds image on first run)")
+  .command("init")
+  .description("Initialize .office directory structure")
   .action(async () => {
-    await runStartDocker();
-  });
-
-program
-  .command("stop")
-  .description("Stop the office container")
-  .action(async () => {
-    await runStopDocker();
-  });
-
-program
-  .command("restart")
-  .description("Rebuild image and recreate the container from scratch")
-  .action(async () => {
-    await runRestartDocker();
-  });
-
-program
-  .command("status")
-  .description("Show office container status")
-  .action(async () => {
-    await runStatusDocker();
+    await runInit(process.cwd());
+    console.log("Initialized .office/");
   });
 
 // -- character ---------------------------------------------------------------
@@ -62,16 +33,14 @@ character
   .description("Generate a new character from a description")
   .argument("<description...>", "brief character description")
   .action(async (description: string[]) => {
-    await ensureRunning();
-    await dockerExec(["office", "_exec", "new-character", description.join(" ")]);
+    await runNewCharacter(description.join(" "), { projectRoot: process.cwd() });
   });
 
 character
   .command("list")
   .description("List all characters")
-  .action(async () => {
-    await ensureRunning();
-    await dockerExec(["office", "_exec", "list", "characters"]);
+  .action(() => {
+    runList("characters", process.cwd());
   });
 
 // -- space -------------------------------------------------------------------
@@ -85,16 +54,14 @@ space
   .description("Generate a new space from a description")
   .argument("<description...>", "brief space description")
   .action(async (description: string[]) => {
-    await ensureRunning();
-    await dockerExec(["office", "_exec", "new-space", description.join(" ")]);
+    await runNewSpace(description.join(" "), { projectRoot: process.cwd() });
   });
 
 space
   .command("list")
   .description("List all spaces")
-  .action(async () => {
-    await ensureRunning();
-    await dockerExec(["office", "_exec", "list", "spaces"]);
+  .action(() => {
+    runList("spaces", process.cwd());
   });
 
 // -- session -----------------------------------------------------------------
@@ -116,72 +83,6 @@ session
     description?: string;
     user?: string;
   }) => {
-    await ensureRunning();
-    const args = [
-      "office", "_exec", "session-start",
-      "--space", opts.space,
-      "--characters", opts.characters,
-    ];
-    if (opts.description) args.push("--description", opts.description);
-    if (opts.user) args.push("--user", opts.user);
-    await dockerExec(args);
-  });
-
-session
-  .command("continue")
-  .description("Resume a paused session")
-  .argument("<session_name>", "session directory name")
-  .action(async (sessionName: string) => {
-    await ensureRunning();
-    await dockerExec(["office", "_exec", "session-continue", sessionName]);
-  });
-
-session
-  .command("list")
-  .description("List all sessions")
-  .action(async () => {
-    await ensureRunning();
-    await dockerExec(["office", "_exec", "list", "sessions"]);
-  });
-
-// ---------------------------------------------------------------------------
-// Internal commands (run inside the container, hidden from top-level help)
-// ---------------------------------------------------------------------------
-
-const internal = program.command("_exec", { hidden: true });
-
-internal
-  .command("init")
-  .action(async () => {
-    await runInit(process.cwd());
-  });
-
-internal
-  .command("new-character")
-  .argument("<description...>", "brief character description")
-  .action(async (description: string[]) => {
-    await runNewCharacter(description.join(" "), { projectRoot: process.cwd() });
-  });
-
-internal
-  .command("new-space")
-  .argument("<description...>", "brief space description")
-  .action(async (description: string[]) => {
-    await runNewSpace(description.join(" "), { projectRoot: process.cwd() });
-  });
-
-internal
-  .command("session-start")
-  .requiredOption("--space <name>", "space name")
-  .requiredOption("--characters <names>", "comma-separated character names")
-  .option("--description <text>", "session description", "Office simulation")
-  .option("--user <name>", "character controlled by the human user")
-  .action(async (opts: {
-    space: string;
-    characters: string;
-    description?: string;
-    user?: string;
-  }) => {
     await runStart({
       space: opts.space,
       characters: opts.characters,
@@ -191,23 +92,19 @@ internal
     });
   });
 
-internal
-  .command("session-continue")
+session
+  .command("continue")
+  .description("Resume a paused session")
   .argument("<session_name>", "session directory name")
   .action(async (sessionName: string) => {
     await runContinue(sessionName, { projectRoot: process.cwd() });
   });
 
-internal
+session
   .command("list")
-  .argument("<target>", "spaces, characters, or sessions")
-  .action((target: string) => {
-    const valid: ListTarget[] = ["spaces", "characters", "sessions"];
-    if (!valid.includes(target as ListTarget)) {
-      console.error(`Unknown target: ${target}. Use one of: ${valid.join(", ")}`);
-      process.exit(1);
-    }
-    runList(target as ListTarget, process.cwd());
+  .description("List all sessions")
+  .action(() => {
+    runList("sessions", process.cwd());
   });
 
 // ---------------------------------------------------------------------------

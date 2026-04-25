@@ -5,7 +5,7 @@ import { writeDefaultConfigIfMissing } from "../lib/config.js";
 
 export async function runInit(projectRoot: string): Promise<void> {
   const office = officeRoot(projectRoot);
-  for (const sub of ["spaces", "characters", "sessions", "logs", "prompts"]) {
+  for (const sub of ["spaces", "characters", "sessions", "logs"]) {
     fs.mkdirSync(path.join(office, sub), { recursive: true });
   }
 

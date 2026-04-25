@@ -5,7 +5,6 @@ import { readSession, writeSession, sessionExists } from "../lib/session-io.js";
 import { runSessionLoop } from "../lib/session-loop.js";
 
 export interface ContinueOptions {
-  runner?: string;
   projectRoot?: string;
 }
 
@@ -43,10 +42,7 @@ export async function runContinue(
   session.status = "active";
   writeSession(sessionDir, session);
 
-  await runSessionLoop(sessionDir, {
-    runner: opts.runner,
-    projectRoot,
-  });
+  await runSessionLoop(sessionDir, { projectRoot });
 }
 
 function listSessions(projectRoot: string): string[] {

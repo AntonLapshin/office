@@ -2,12 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { spacesDir, slugify } from "../lib/paths.js";
 import { readConfig } from "../lib/config.js";
-import { detectRunner } from "../lib/runner.js";
-import { spawnPersona } from "../lib/persona.js";
-import { appendLog, appendPerf } from "../lib/logger.js";
+import { runSpaceCreator } from "../lib/persona.js";
+import { appendLog } from "../lib/logger.js";
 
 export interface NewSpaceOptions {
-  runner?: string;
   projectRoot?: string;
 }
 
@@ -17,45 +15,21 @@ export async function runNewSpace(
 ): Promise<void> {
   const projectRoot = opts.projectRoot ?? process.cwd();
   const config = readConfig(projectRoot);
-  const runner = await detectRunner(opts.runner ?? config.runner ?? undefined);
   const slug = slugify(description);
-  const outputPath = path.join(spacesDir(projectRoot), `${slug}.md`);
-  const model = config.models["space-creator"] ?? null;
+  const outputPath = path.join(spacesDir(projectRoot), `${slug}.txt`);
 
-  appendLog(projectRoot, "new-space", `starting | description="${description}" | slug="${slug}" | outputPath="${outputPath}" | runner=${runner}`);
+  appendLog(projectRoot, "new-space", `starting | description="${description}" | slug="${slug}" | outputPath="${outputPath}"`);
   console.log(`Creating space: ${description}`);
 
-  const startTime = Date.now();
-  await spawnPersona(
-    "space-creator",
-    {
-      projectRoot,
-      extraContext: {
-        "Space description": description,
-        "Output path": outputPath,
-      },
-    },
-    runner,
-    config,
-  );
-  const durationMs = Date.now() - startTime;
+  await runSpaceCreator(description, outputPath, config, projectRoot);
 
   const ok = fs.existsSync(outputPath);
-  appendPerf(projectRoot, {
-    role: "space-creator",
-    model,
-    runner,
-    durationMs,
-    status: ok ? "success" : "error",
-  });
-
   if (ok) {
     appendLog(projectRoot, "new-space", `success — file created at ${outputPath}`);
-    console.log(`\noffice new-space complete — check ${outputPath}`);
+    console.log(`\nSpace created: ${outputPath}`);
   } else {
-    appendLog(projectRoot, "new-space", `FAILED — model did not create ${outputPath}`);
-    console.error(`\noffice new-space failed — the model did not create ${outputPath}`);
-    console.error(`Check .office/logs/ for the full persona output to diagnose the issue.`);
+    appendLog(projectRoot, "new-space", `FAILED — file not created at ${outputPath}`);
+    console.error(`\nSpace creation failed — check .office/logs/ for details`);
     process.exit(1);
   }
 }

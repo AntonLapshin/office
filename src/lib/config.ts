@@ -11,15 +11,16 @@ const modelsSchema = z.object({
 }).default({});
 
 const configSchema = z.object({
-  runner: z.enum(["claude", "opencode"]).nullable().default("opencode"),
-  logging: z.boolean().default(true),
-  timeouts: z
-    .object({
-      personaRunMs: z.number().int().default(600_000),
-    })
-    .default({}),
-  maxRounds: z.number().int().default(50),
+  provider: z.object({
+    baseUrl: z.string().default("http://localhost:11434"),
+  }).default({}),
+  defaultModel: z.string().default("llama3.2"),
   models: modelsSchema,
+  logging: z.boolean().default(true),
+  maxRounds: z.number().int().default(50),
+  retries: z.number().int().default(3),
+  delayMs: z.number().int().default(0),
+  timeoutMs: z.number().int().default(300_000),
 });
 
 export type Config = z.infer<typeof configSchema>;

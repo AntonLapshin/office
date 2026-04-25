@@ -1,15 +1,10 @@
-import path from "node:path";
 import readline from "node:readline";
-import { readConfig, type Config } from "./config.js";
-import { detectRunner, type Runner } from "./runner.js";
-import { spawnPersona } from "./persona.js";
-import { appendPerf } from "./logger.js";
+import { readConfig } from "./config.js";
+import { runCharacterAgent, runStageManager } from "./persona.js";
 import { readSession, writeSession } from "./session-io.js";
 import { appendTimeline, readRecentTimeline } from "./timeline.js";
-import type { Session } from "./schema.js";
 
 export interface SessionLoopOptions {
-  runner?: string;
   projectRoot?: string;
 }
 
@@ -19,27 +14,18 @@ export async function runSessionLoop(
 ): Promise<void> {
   const projectRoot = opts.projectRoot ?? process.cwd();
   const config = readConfig(projectRoot);
-  const runner = await detectRunner(opts.runner ?? config.runner ?? undefined);
 
   setupGracefulShutdown(sessionDir);
 
   let session = readSession(sessionDir);
 
   while (session.status === "active") {
-    if (session.turnPhase === "stage-manager-init") {
-      console.log(`\n--- Round ${session.currentRound + 1} ---\n`);
-
-      const smInitStart = Date.now();
-      await spawnStageManager(sessionDir, projectRoot, runner, config, session, "init");
-      appendPerf(projectRoot, { role: "stage-manager/init", model: config.models["stage-manager"] ?? null, runner, durationMs: Date.now() - smInitStart, status: "success" });
-      printRecentTimeline(sessionDir, 5);
-
-      session.turnPhase = "character-turn";
-      session.currentTurnIndex = 0;
-      writeSession(sessionDir, session);
-    }
-
     if (session.turnPhase === "character-turn") {
+      if (session.currentTurnIndex === 0) {
+        console.log(`\n--- Round ${session.currentRound + 1} ---\n`);
+        printRecentTimeline(sessionDir, 5);
+      }
+
       const characterName = session.characters[session.currentTurnIndex];
 
       if (characterName === session.userCharacter) {
@@ -49,7 +35,7 @@ export async function runSessionLoop(
         if (userInput === null) {
           session.status = "paused";
           writeSession(sessionDir, session);
-          console.log(`\nSession paused. Resume with: office continue ${session.id}`);
+          console.log(`\nSession paused. Resume with: office session continue ${session.id}`);
           return;
         }
 
@@ -59,9 +45,7 @@ export async function runSessionLoop(
         }
       } else {
         console.log(`\n[${characterName}'s turn]`);
-        const caStart = Date.now();
-        await spawnCharacterAgent(sessionDir, projectRoot, runner, config, session, characterName);
-        appendPerf(projectRoot, { role: `character-agent/${characterName}`, model: config.models["character-agent"] ?? null, runner, durationMs: Date.now() - caStart, status: "success" });
+        await runCharacterAgent(characterName, sessionDir, session, config, projectRoot);
         printRecentTimeline(sessionDir, 3);
       }
 
@@ -70,16 +54,14 @@ export async function runSessionLoop(
     }
 
     if (session.turnPhase === "stage-manager-update") {
-      const smUpdateStart = Date.now();
-      await spawnStageManager(sessionDir, projectRoot, runner, config, session, "update");
-      appendPerf(projectRoot, { role: "stage-manager/update", model: config.models["stage-manager"] ?? null, runner, durationMs: Date.now() - smUpdateStart, status: "success" });
+      await runStageManager(sessionDir, session, config, projectRoot);
       printRecentTimeline(sessionDir, 3);
 
       const nextIndex = session.currentTurnIndex + 1;
       if (nextIndex >= session.characters.length) {
         session.currentRound++;
         session.currentTurnIndex = 0;
-        session.turnPhase = "stage-manager-init";
+        session.turnPhase = "character-turn";
       } else {
         session.currentTurnIndex = nextIndex;
         session.turnPhase = "character-turn";
@@ -96,89 +78,6 @@ export async function runSessionLoop(
 
     session = readSession(sessionDir);
   }
-}
-
-async function spawnStageManager(
-  sessionDir: string,
-  projectRoot: string,
-  runner: Runner,
-  config: Config,
-  session: Session,
-  mode: "init" | "update",
-): Promise<void> {
-  const characterStates = session.characters
-    .map((name) => path.join(sessionDir, `${name}.json`))
-    .join(", ");
-
-  const embeddedFiles: Record<string, string> = {
-    [`Space: ${session.spaceName}`]: path.join(sessionDir, `${session.spaceName}.md`),
-  };
-  for (const name of session.characters) {
-    embeddedFiles[`Character state: ${name}`] = path.join(sessionDir, `${name}.json`);
-  }
-  embeddedFiles["Timeline"] = path.join(sessionDir, "timeline.log");
-
-  await spawnPersona(
-    "stage-manager",
-    {
-      projectRoot,
-      sessionDir,
-      extraContext: {
-        "Mode": mode,
-        "Space file": path.join(sessionDir, `${session.spaceName}.md`),
-        "Character states": characterStates,
-        "Timeline": path.join(sessionDir, "timeline.log"),
-        "Current round": String(session.currentRound),
-      },
-      embeddedFiles,
-    },
-    runner,
-    config,
-  );
-}
-
-async function spawnCharacterAgent(
-  sessionDir: string,
-  projectRoot: string,
-  runner: Runner,
-  config: Config,
-  session: Session,
-  characterName: string,
-): Promise<void> {
-  const allStates = session.characters
-    .map((name) => path.join(sessionDir, `${name}.json`))
-    .join(", ");
-
-  const embeddedFiles: Record<string, string> = {
-    [`Character description: ${characterName}`]: path.join(sessionDir, `${characterName}.md`),
-    [`Character state: ${characterName}`]: path.join(sessionDir, `${characterName}.json`),
-    [`Space: ${session.spaceName}`]: path.join(sessionDir, `${session.spaceName}.md`),
-  };
-  for (const name of session.characters) {
-    if (name !== characterName) {
-      embeddedFiles[`Other character state: ${name}`] = path.join(sessionDir, `${name}.json`);
-    }
-  }
-  embeddedFiles["Timeline"] = path.join(sessionDir, "timeline.log");
-
-  await spawnPersona(
-    "character-agent",
-    {
-      projectRoot,
-      sessionDir,
-      extraContext: {
-        "Character name": characterName,
-        "Character description": path.join(sessionDir, `${characterName}.md`),
-        "Character state": path.join(sessionDir, `${characterName}.json`),
-        "Space file": path.join(sessionDir, `${session.spaceName}.md`),
-        "All character states": allStates,
-        "Timeline": path.join(sessionDir, "timeline.log"),
-      },
-      embeddedFiles,
-    },
-    runner,
-    config,
-  );
 }
 
 function printRecentTimeline(sessionDir: string, count: number): void {
@@ -238,7 +137,7 @@ function setupGracefulShutdown(sessionDir: string): void {
       const session = readSession(sessionDir);
       session.status = "paused";
       writeSession(sessionDir, session);
-      console.log(`\nSession paused. Resume with: office continue ${session.id}`);
+      console.log(`\nSession paused. Resume with: office session continue ${session.id}`);
     } catch {
       // best effort
     }
