@@ -56,8 +56,9 @@ space
   .command("create")
   .description("Generate a new space from a description")
   .argument("<description...>", "brief space description")
-  .action(async (description: string[]) => {
-    await runNewSpace(description.join(" "), { projectRoot: process.cwd() });
+  .requiredOption("--name <name>", "name for the space file")
+  .action(async (description: string[], cmdOpts: { name: string }) => {
+    await runNewSpace(description.join(" "), { name: cmdOpts.name, projectRoot: process.cwd() });
   });
 
 space

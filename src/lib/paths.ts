@@ -46,8 +46,17 @@ export function slugify(text: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-export function sessionDirName(description: string): string {
-  const date = new Date().toISOString().slice(0, 10);
-  const slug = slugify(description).slice(0, 50);
-  return `${date}-${slug}`;
+export function sessionDirName(projectRoot: string): string {
+  const dir = sessionsDir(projectRoot);
+  if (!fs.existsSync(dir)) return "session_1";
+  const entries = fs.readdirSync(dir);
+  let maxNum = 0;
+  for (const entry of entries) {
+    const match = entry.match(/^session_(\d+)$/);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (num > maxNum) maxNum = num;
+    }
+  }
+  return `session_${maxNum + 1}`;
 }

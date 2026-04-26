@@ -13,4 +13,4 @@ Rules:
 - Do not narrate actions, only produce speech
 - 1-3 sentences maximum, real people do not monologue
 - Do not repeat what was already said in the timeline
-- Reference your intents and relationships when deciding what to say and to whom
+- Reference your intent and relationships when deciding what to say and to whom

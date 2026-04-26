@@ -4,7 +4,7 @@ import { personaTemplateDir } from "./paths.js";
 import { callLlm, callLlmJson } from "./llm.js";
 import { readCharacterState, writeCharacterState } from "./session-io.js";
 import { appendTimeline, readRecentTimeline } from "./timeline.js";
-import { characterStateSchema, stageManagerResponseSchema, type Session } from "./schema.js";
+import { characterStateSchema, stageManagerDiffResponseSchema, type CharacterState, type DiffEntry, type Session } from "./schema.js";
 import type { Config } from "./config.js";
 
 export type PersonaRole =
@@ -33,6 +33,23 @@ export async function runSpaceCreator(
 ): Promise<void> {
   const systemPrompt = readTemplate("space-creator");
   const userPrompt = `Create a space: ${description}`;
+
+  const response = await callLlm({
+    config, role: "space-creator", systemPrompt, userPrompt, projectRoot,
+  });
+
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, response.trim() + "\n", "utf8");
+}
+
+export async function runSpaceSummarizer(
+  spaceText: string,
+  outputPath: string,
+  config: Config,
+  projectRoot: string,
+): Promise<void> {
+  const systemPrompt = "You summarize virtual office space descriptions into a concise paragraph. Output a 2-4 sentence summary covering the key rooms, their connections, and the overall vibe. Plain text only.";
+  const userPrompt = `Summarize this space:\n\n${spaceText}`;
 
   const response = await callLlm({
     config, role: "space-creator", systemPrompt, userPrompt, projectRoot,
@@ -75,9 +92,17 @@ export async function runCharacterAgent(
   const systemPrompt = readTemplate("character-agent");
 
   const charDesc = readFileOrEmpty(path.join(sessionDir, `${characterName}.txt`));
-  const charState = readFileOrEmpty(path.join(sessionDir, `${characterName}.json`));
-  const spaceDesc = readFileOrEmpty(path.join(sessionDir, `${session.spaceName}.txt`));
-  const timeline = readRecentTimeline(sessionDir, 50).join("\n");
+  const charState = readCharacterState(sessionDir, characterName);
+  const spaceDesc = readFileOrEmpty(path.join(sessionDir, `${session.spaceName}_summary.txt`));
+
+  const stateText = [
+    `LOCATION: ${charState.location}`,
+    `CURRENT ACTION: ${charState.currentAction}`,
+    `MOOD: ${charState.mood}`,
+    `INTENT: ${charState.intent}`,
+    `MEMORY: ${charState.memory.join(", ")}`,
+    `RELATIONSHIPS: ${Object.entries(charState.relationships).map(([k, v]) => `${k}=${v}`).join(", ")}`,
+  ].join("\n");
 
   const otherStates: string[] = [];
   for (const name of session.characters) {
@@ -94,16 +119,13 @@ export async function runCharacterAgent(
     charDesc,
     "",
     "YOUR CURRENT STATE:",
-    charState,
+    stateText,
     "",
     "SPACE:",
     spaceDesc,
     "",
     "OTHER CHARACTERS IN SIMULATION:",
     otherStates.length > 0 ? otherStates.join("\n") : "(none)",
-    "",
-    "RECENT TIMELINE:",
-    timeline || "(empty)",
   ].join("\n");
 
   const response = await callLlm({
@@ -131,26 +153,100 @@ export async function runStageManager(
     characters[name] = readCharacterState(sessionDir, name);
   }
 
-  const inputJson = { space: spaceDesc, characters, timeline };
-  const userPrompt = JSON.stringify(inputJson, null, 2);
+  const userPrompt = [
+    "RECENT TIMELINE (last 10 entries):",
+    timeline || "(empty)",
+    "",
+    "LOCATION DESCRIPTION:",
+    spaceDesc,
+    "",
+    "CURRENT STATE (JSON):",
+    JSON.stringify({ narration: "", characters }, null, 2),
+  ].join("\n");
 
-  const result = await callLlmJson({
+  const diffs = await callLlmJson({
     config, role: "stage-manager", systemPrompt, userPrompt, projectRoot, sessionDir,
-    schema: stageManagerResponseSchema,
+    schema: stageManagerDiffResponseSchema,
   });
 
+  const currentState: { narration: string; characters: Record<string, CharacterState> } = {
+    narration: "",
+    characters: {},
+  };
   for (const name of session.characters) {
-    const raw = result.characters[name];
-    if (raw) {
-      const updated = characterStateSchema.parse({ ...raw, updatedAt: new Date().toISOString() });
+    currentState.characters[name] = readCharacterState(sessionDir, name);
+  }
+
+  applyDiffs(currentState, diffs);
+
+  for (const name of session.characters) {
+    const char = currentState.characters[name];
+    if (char) {
+      const updated = characterStateSchema.parse({ ...char, updatedAt: new Date().toISOString() });
       writeCharacterState(sessionDir, name, updated);
     }
   }
 
-  if (result.narration && result.narration.trim().length > 0) {
-    for (const line of result.narration.trim().split("\n")) {
+  if (currentState.narration?.trim()) {
+    for (const line of currentState.narration.trim().split("\n")) {
       if (line.trim()) {
         appendTimeline(sessionDir, `[Stage Manager] ${line.trim()}`);
+      }
+    }
+  }
+}
+
+function applyDiffs(
+  state: { narration: string; characters: Record<string, CharacterState> },
+  diffs: DiffEntry[],
+): void {
+  for (const diff of diffs) {
+    const segments = diff.path.split(".");
+
+    if (segments[0] === "narration") {
+      if (diff.op === "set") {
+        state.narration = String(diff.value ?? "");
+      }
+      continue;
+    }
+
+    if (segments[0] === "characters" && segments.length >= 3) {
+      const charName = segments[1];
+      const field = segments[2];
+      const char = state.characters[charName];
+      if (!char) continue;
+
+      switch (field) {
+        case "location":
+        case "mood":
+        case "currentAction":
+        case "intent":
+          if (diff.op === "set") {
+            (char as Record<string, unknown>)[field] = String(diff.value ?? "");
+          }
+          break;
+
+        case "memory":
+          if (diff.op === "add") {
+            char.memory.push(String(diff.value ?? ""));
+            if (char.memory.length > 50) {
+              char.memory = char.memory.slice(-50);
+            }
+          } else if (diff.op === "delete") {
+            char.memory = char.memory.filter(m => m !== String(diff.value));
+          }
+          break;
+
+        case "relationships":
+          if (segments.length >= 4) {
+            const targetName = segments[3];
+            if (diff.op === "set") {
+              char.relationships[targetName] = String(diff.value ?? "");
+            } else if (diff.op === "delete") {
+              delete char.relationships[targetName];
+            }
+          }
+          break;
       }
     }
   }

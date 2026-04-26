@@ -42,11 +42,16 @@ export async function runStart(opts: StartOptions): Promise<void> {
     process.exit(1);
   }
 
-  const sessionId = sessionDirName(description);
+  const sessionId = sessionDirName(projectRoot);
   const sessionDir = path.join(sessionsDir(projectRoot), sessionId);
   fs.mkdirSync(sessionDir, { recursive: true });
 
   fs.copyFileSync(spaceFile, path.join(sessionDir, `${spaceName}.txt`));
+
+  const summaryFile = path.join(spacesDir(projectRoot), `${spaceName}_summary.txt`);
+  if (fs.existsSync(summaryFile)) {
+    fs.copyFileSync(summaryFile, path.join(sessionDir, `${spaceName}_summary.txt`));
+  }
 
   for (const name of characterNames) {
     const src = path.join(charactersDir(projectRoot), `${name}.txt`);
@@ -68,7 +73,7 @@ export async function runStart(opts: StartOptions): Promise<void> {
       location: firstRoom,
       mood: "neutral",
       currentAction: "standing",
-      intents: [],
+      intent: "",
       memory: [],
       relationships,
       updatedAt: new Date().toISOString(),
