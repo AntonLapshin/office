@@ -91,9 +91,9 @@ export async function runCharacterAgent(
 ): Promise<string> {
   const systemPrompt = readTemplate("character-agent");
 
-  const charDesc = readFileOrEmpty(path.join(sessionDir, `${characterName}.txt`));
+  const charDesc = readFileOrEmpty(path.join(sessionDir, "characters", `${characterName}.txt`));
   const charState = readCharacterState(sessionDir, characterName);
-  const spaceDesc = readFileOrEmpty(path.join(sessionDir, `${session.spaceName}_summary.txt`));
+  const spaceDesc = readFileOrEmpty(path.join(sessionDir, "spaces", `${session.spaceName}_summary.txt`));
 
   const stateText = [
     `LOCATION: ${charState.location}`,
@@ -145,7 +145,7 @@ export async function runStageManager(
 ): Promise<void> {
   const systemPrompt = readTemplate("stage-manager");
 
-  const spaceDesc = readFileOrEmpty(path.join(sessionDir, `${session.spaceName}.txt`));
+  const spaceDesc = readFileOrEmpty(path.join(sessionDir, "spaces", `${session.spaceName}.txt`));
   const timeline = readRecentTimeline(sessionDir, 10).join("\n");
 
   const characters: Record<string, unknown> = {};

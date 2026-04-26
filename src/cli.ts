@@ -6,6 +6,7 @@ import { runNewSpace } from "./commands/new-space.js";
 import { runNewCharacter } from "./commands/new-character.js";
 import { runStart } from "./commands/start.js";
 import { runContinue } from "./commands/continue.js";
+import { runAddCharacter } from "./commands/add-character.js";
 import { runList, type ListTarget } from "./commands/list.js";
 
 const program = new Command();
@@ -102,6 +103,15 @@ session
   .argument("<session_name>", "session directory name")
   .action(async (sessionName: string) => {
     await runContinue(sessionName, { projectRoot: process.cwd() });
+  });
+
+session
+  .command("add-character")
+  .description("Add a character to an existing session")
+  .argument("<session_name>", "session directory name")
+  .requiredOption("--character <name>", "character name to add")
+  .action(async (sessionName: string, cmdOpts: { character: string }) => {
+    await runAddCharacter(sessionName, cmdOpts.character, { projectRoot: process.cwd() });
   });
 
 session

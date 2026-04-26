@@ -6,9 +6,9 @@ Virtual office simulation powered by LLM personas. Create spaces, characters, an
 
 The tool makes direct API calls to an LLM provider (Ollama, Google AI Studio, Anthropic, OpenAI, or any OpenAI-compatible endpoint). Four persona types drive the simulation:
 
-- **Space Creator** — generates a detailed office layout from a brief description
-- **Character Creator** — generates a character profile with personality, speech patterns, and background
-- **Stage Manager** — updates character states (location, mood, intents, memory, relationships) and narrates physical actions
+- **Space Creator** — generates a detailed office layout from a brief description, plus a short summary used for character prompts
+- **Character Creator** — generates a character profile with age, gender, personality, speech patterns, and background
+- **Stage Manager** — updates character states (location, mood, intent, memory, relationships) via diff operations and narrates physical actions
 - **Character Agent** — speaks as a specific character based on their personality and current state
 
 ## Prerequisites
@@ -23,13 +23,13 @@ npm install -g .
 
 office init
 
-office space create An open-plan startup office with a kitchen and a meeting room
+office space create An open-plan startup office with a kitchen and a meeting room --name startup
 
 office character create Dan, 31, Senior Engineer, introverted but friendly, loves coffee
 office character create Boris, 26, Junior Developer, first day at the company, eager and nervous
 
 office session start \
-  --space open-plan-startup-office-with-a-kitchen-and-a-meeting-room \
+  --space startup \
   --characters dan,boris \
   --description "Dan is working at his desk when Boris enters for his first day" \
   --user dan
@@ -46,9 +46,11 @@ office init                              # Initialize .office/ directory and def
 ### Spaces
 
 ```bash
-office space create <description...>     # Generate a new space
-office space list                        # List all spaces
+office space create <description...> --name <name>  # Generate a new space
+office space list                                    # List all spaces
 ```
+
+The `--name` flag is required and determines the filename for the space. A short summary is also generated automatically and used in character prompts.
 
 ### Characters
 
@@ -60,9 +62,10 @@ office character list                    # List all characters
 ### Sessions
 
 ```bash
-office session start [options]           # Create and run a new session
-office session continue <session_name>   # Resume a paused session
-office session list                      # List all sessions
+office session start [options]                              # Create and run a new session
+office session continue <session_name>                      # Resume a paused session
+office session add-character <session_name> --character <n>  # Add a character to a session
+office session list                                         # List all sessions
 ```
 
 #### session start options
@@ -73,6 +76,14 @@ office session list                      # List all sessions
 | `--characters <names>` | Comma-separated character names |
 | `--description <text>` | Scene-setting description (default: "Office simulation") |
 | `--user <name>` | Which character you control (omit for fully autonomous) |
+
+#### session add-character
+
+Adds a character to an existing session. The character profile is cloned into the session, a new state file is created, and other characters' relationships are updated.
+
+```bash
+office session add-character session_1 --character tanya
+```
 
 ## Providers
 
@@ -230,7 +241,7 @@ Full `.office/config.json` reference:
 | `provider` | `"ollama"` | Key into `providers` — which provider to use |
 | `providers` | (ollama) | Map of provider name to provider config |
 | `models` | all null | Per-role model overrides (falls back to provider's `defaultModel`) |
-| `logging` | `true` | Print LLM call details to console, write full logs to `.office/logs/` |
+| `logging` | `true` | Print LLM call details to console |
 | `maxRounds` | `50` | Safety limit for autonomous sessions |
 | `retries` | `3` | Retry count per LLM call on failure |
 | `delayMs` | `0` | Delay before each LLM call (ms), useful for rate limiting |
@@ -238,15 +249,23 @@ Full `.office/config.json` reference:
 
 ## Session structure
 
-Each session is stored in `.office/sessions/<id>/`:
+Sessions are named incrementally: `session_1`, `session_2`, etc.
+
+Each session is stored in `.office/sessions/<session_name>/`:
 
 ```
-session.json          # Metadata, turn cursor, status
-<space_name>.txt      # Cloned space description
-<character>.txt       # Cloned character profiles
-<character>.json      # Live character state (location, mood, intents, memory, relationships)
-timeline.log          # Full log of speech and narration
-logs.txt              # Session-specific operation log
+session.json              # Metadata, turn cursor, status
+timeline.log              # Full log of speech and narration
+characters/
+  <character>.txt         # Cloned character profile
+  <character>.json        # Live character state (location, mood, intent, memory, relationships)
+spaces/
+  <space_name>.txt        # Cloned space description
+  <space_name>_summary.txt # Space summary for character prompts
+logs/
+  logs.txt                # Operation log
+  performance.txt         # LLM call timing data
+  <role>-<timestamp>.log  # Full prompt + response per LLM call
 ```
 
 ### Turn loop
@@ -254,7 +273,7 @@ logs.txt              # Session-specific operation log
 1. Each character takes a turn (in order):
    - **NPC**: Character Agent generates one line of speech
    - **You** (if `--user` is set): prompted for input
-2. After each speech, the **Stage Manager** updates all character states and optionally narrates physical actions
+2. After each speech, the **Stage Manager** produces diffs to update character states and optionally narrates physical actions
 3. Next round begins
 
 ### Timeline format
@@ -278,14 +297,6 @@ When it's your turn:
 - Just a message — addresses everyone in the room
 - `/quit` — pause the session
 - Empty line — skip your turn
-
-## Logging
-
-All LLM calls are logged to:
-- **Console** — when `logging: true`, one-line summary per call (role, model, attempt, duration, status)
-- **`.office/performance.txt`** — structured timing data for every call
-- **`.office/logs/`** — full prompt + response per call, for debugging
-- **`.office/logs.txt`** — operation-level log (timestamped events)
 
 ## Development
 

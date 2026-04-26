@@ -25,13 +25,15 @@ export function sessionExists(sessionDir: string): boolean {
 }
 
 export function readCharacterState(sessionDir: string, name: string): CharacterState {
-  const file = path.join(sessionDir, `${name}.json`);
+  const file = path.join(sessionDir, "characters", `${name}.json`);
   return characterStateSchema.parse(JSON.parse(fs.readFileSync(file, "utf8")));
 }
 
 export function writeCharacterState(sessionDir: string, name: string, state: CharacterState): void {
   state.updatedAt = new Date().toISOString();
   const validated = characterStateSchema.parse(state);
-  const file = path.join(sessionDir, `${name}.json`);
+  const dir = path.join(sessionDir, "characters");
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `${name}.json`);
   fs.writeFileSync(file, JSON.stringify(validated, null, 2) + "\n", "utf8");
 }

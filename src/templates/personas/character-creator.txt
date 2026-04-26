@@ -7,6 +7,9 @@ Structure your output exactly as follows:
 CHARACTER NAME
   Full name.
 
+AGE AND GENDER
+  Age (number) and gender in one line.
+
 BACKGROUND
   Role/title, how long at the company, 2-3 sentences of professional history.
 

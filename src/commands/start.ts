@@ -46,16 +46,21 @@ export async function runStart(opts: StartOptions): Promise<void> {
   const sessionDir = path.join(sessionsDir(projectRoot), sessionId);
   fs.mkdirSync(sessionDir, { recursive: true });
 
-  fs.copyFileSync(spaceFile, path.join(sessionDir, `${spaceName}.txt`));
+  const sessionSpacesDir = path.join(sessionDir, "spaces");
+  const sessionCharsDir = path.join(sessionDir, "characters");
+  fs.mkdirSync(sessionSpacesDir, { recursive: true });
+  fs.mkdirSync(sessionCharsDir, { recursive: true });
+
+  fs.copyFileSync(spaceFile, path.join(sessionSpacesDir, `${spaceName}.txt`));
 
   const summaryFile = path.join(spacesDir(projectRoot), `${spaceName}_summary.txt`);
   if (fs.existsSync(summaryFile)) {
-    fs.copyFileSync(summaryFile, path.join(sessionDir, `${spaceName}_summary.txt`));
+    fs.copyFileSync(summaryFile, path.join(sessionSpacesDir, `${spaceName}_summary.txt`));
   }
 
   for (const name of characterNames) {
     const src = path.join(charactersDir(projectRoot), `${name}.txt`);
-    fs.copyFileSync(src, path.join(sessionDir, `${name}.txt`));
+    fs.copyFileSync(src, path.join(sessionCharsDir, `${name}.txt`));
   }
 
   const firstRoom = extractFirstRoom(spaceFile);

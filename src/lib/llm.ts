@@ -2,7 +2,7 @@ import type { z } from "zod";
 import type { Config, Provider } from "./config.js";
 import { resolveProvider } from "./config.js";
 import type { PersonaRole } from "./persona.js";
-import { appendLog, appendSessionLog, appendPerf, appendLlmLog } from "./logger.js";
+import { appendLog, appendPerf, appendLlmLog } from "./logger.js";
 
 export interface LlmCallOptions {
   config: Config;
@@ -35,10 +35,7 @@ function delay(ms: number): Promise<void> {
 }
 
 function log(opts: LlmCallOptions, source: string, message: string): void {
-  if (opts.sessionDir) {
-    appendSessionLog(opts.sessionDir, source, message);
-  }
-  appendLog(opts.projectRoot, source, message);
+  appendLog(opts.projectRoot, source, message, opts.sessionDir);
 }
 
 async function fetchOpenAI(
@@ -163,11 +160,11 @@ export async function callLlm(opts: LlmCallOptions): Promise<string> {
       const durationMs = Date.now() - start;
 
       log(opts, opts.role, `success | model=${model} | attempt=${attempt}/${opts.config.retries} | ${durationMs}ms`);
-      appendPerf(opts.projectRoot, { role: opts.role, model, durationMs, status: "success", attempt });
+      appendPerf(opts.projectRoot, { role: opts.role, model, durationMs, status: "success", attempt }, opts.sessionDir);
       appendLlmLog(opts.projectRoot, {
         role: opts.role, model, durationMs, status: "success", attempt,
         systemPrompt: opts.systemPrompt, userPrompt: opts.userPrompt, response,
-      });
+      }, opts.sessionDir);
 
       if (opts.config.logging) {
         console.log(`[office] ${opts.role} | model=${model} | attempt ${attempt}/${opts.config.retries} | ${durationMs}ms | success`);
@@ -181,11 +178,11 @@ export async function callLlm(opts: LlmCallOptions): Promise<string> {
       const errorMsg = lastError.message;
 
       log(opts, opts.role, `error | model=${model} | attempt=${attempt}/${opts.config.retries} | ${durationMs}ms | ${errorMsg}`);
-      appendPerf(opts.projectRoot, { role: opts.role, model, durationMs, status: "error", attempt, error: errorMsg });
+      appendPerf(opts.projectRoot, { role: opts.role, model, durationMs, status: "error", attempt, error: errorMsg }, opts.sessionDir);
       appendLlmLog(opts.projectRoot, {
         role: opts.role, model, durationMs, status: "error", attempt,
         systemPrompt: opts.systemPrompt, userPrompt: opts.userPrompt, response: "", error: errorMsg,
-      });
+      }, opts.sessionDir);
 
       if (opts.config.logging) {
         console.error(`[office] ${opts.role} | model=${model} | attempt ${attempt}/${opts.config.retries} | ${durationMs}ms | error: ${errorMsg}`);
@@ -224,11 +221,11 @@ export async function callLlmJson<T>(opts: LlmJsonCallOptions<T>): Promise<T> {
       const validated = opts.schema.parse(parsed);
 
       log(opts, opts.role, `success | model=${model} | attempt=${attempt}/${opts.config.retries} | ${durationMs}ms`);
-      appendPerf(opts.projectRoot, { role: opts.role, model, durationMs, status: "success", attempt });
+      appendPerf(opts.projectRoot, { role: opts.role, model, durationMs, status: "success", attempt }, opts.sessionDir);
       appendLlmLog(opts.projectRoot, {
         role: opts.role, model, durationMs, status: "success", attempt,
         systemPrompt, userPrompt: opts.userPrompt, response: raw,
-      });
+      }, opts.sessionDir);
 
       if (opts.config.logging) {
         console.log(`[office] ${opts.role} | model=${model} | attempt ${attempt}/${opts.config.retries} | ${durationMs}ms | success`);
@@ -241,11 +238,11 @@ export async function callLlmJson<T>(opts: LlmJsonCallOptions<T>): Promise<T> {
       const errorMsg = lastError.message;
 
       log(opts, opts.role, `error | model=${model} | attempt=${attempt}/${opts.config.retries} | ${durationMs}ms | ${errorMsg}`);
-      appendPerf(opts.projectRoot, { role: opts.role, model, durationMs, status: "error", attempt, error: errorMsg });
+      appendPerf(opts.projectRoot, { role: opts.role, model, durationMs, status: "error", attempt, error: errorMsg }, opts.sessionDir);
       appendLlmLog(opts.projectRoot, {
         role: opts.role, model, durationMs, status: "error", attempt,
         systemPrompt, userPrompt: opts.userPrompt, response: "", error: errorMsg,
-      });
+      }, opts.sessionDir);
 
       if (opts.config.logging) {
         console.error(`[office] ${opts.role} | model=${model} | attempt ${attempt}/${opts.config.retries} | ${durationMs}ms | error: ${errorMsg}`);

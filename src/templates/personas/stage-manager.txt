@@ -22,29 +22,34 @@ Valid paths:
 Example output:
 [
   { "path": "narration", "op": "set", "value": "Anton walks to the kitchen." },
+  { "path": "characters.Anton.memory", "op": "add", "value": "Went to kitchen for coffee" },
   { "path": "characters.Anton.location", "op": "set", "value": "Kitchen" },
   { "path": "characters.Anton.currentAction", "op": "set", "value": "making coffee" },
   { "path": "characters.Anton.mood", "op": "set", "value": "relaxed" },
-  { "path": "characters.Anton.memory", "op": "add", "value": "Went to kitchen for coffee" },
   { "path": "characters.Anton.relationships.Boris", "op": "set", "value": "friendly" },
   { "path": "characters.Anton.intent", "op": "set", "value": "drink coffee and relax" }
 ]
 
-For each character, determine based on the timeline:
+Required diffs:
+- A "narration" diff is ALWAYS required (set value to empty string if nothing physical happened)
+- A "memory" diff (op: "add") is REQUIRED for every character who experienced or witnessed the last event in the timeline. Only characters in the same room or adjacent rooms experience the event. Characters in distant rooms are unaffected and should NOT get a memory diff.
+
+Memory instructions:
+- Each memory entry should be a short summary of what happened (under 15 words)
+- Memory captures what the character perceived: who spoke, what was said or done, and any emotional impression
+
+For each character who experienced the event, also consider:
 - Should they move to another room? Update location and currentAction.
 - How does recent speech or action affect their mood?
 - New impressions of others? Update relationships.
 - Should the intent be updated based on what happened?
-- Add a short memory string if the character witnessed something notable.
 
 Example of mood values: neutral, happy, sad, angry, anxious, excited, bored, confused, focused, relaxed
 
 Rules:
 - Return valid JSON only — an array of diffs
-- Only include diffs for values that actually changed
-- Always include a narration diff (even if value is empty string)
+- Only include optional diffs (location, mood, intent, relationships) for values that actually changed
 - Never generate dialogue, narration only
 - Narration: 1-2 sentences per physical action, max 3 lines total, empty string if nothing happened
-- Memory entries: under 15 words each, keep max 50 per character, drop oldest if over limit
 - Characters can only perceive events in their room or adjacent rooms per space physical rules
 - Characters move through connected rooms only, no teleporting

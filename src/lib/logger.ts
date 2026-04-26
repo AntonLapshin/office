@@ -2,24 +2,20 @@ import fs from "node:fs";
 import path from "node:path";
 import { officeRoot } from "./paths.js";
 
-export function logsDir(projectRoot: string): string {
-  return path.join(officeRoot(projectRoot), "logs");
-}
-
-export function appendLog(projectRoot: string, source: string, message: string): void {
+export function appendLog(projectRoot: string, source: string, message: string, sessionDir?: string): void {
   const ts = new Date().toISOString();
   const flat = message.replace(/\n/g, " ").trim();
   const line = `${ts} | ${source.toUpperCase()} | ${flat}\n`;
-  const logFile = path.join(officeRoot(projectRoot), "logs.txt");
-  fs.mkdirSync(path.dirname(logFile), { recursive: true });
-  fs.appendFileSync(logFile, line, "utf8");
-}
 
-export function appendSessionLog(sessionDir: string, source: string, message: string): void {
-  const ts = new Date().toISOString();
-  const flat = message.replace(/\n/g, " ").trim();
-  const line = `${ts} | ${source.toUpperCase()} | ${flat}\n`;
-  fs.appendFileSync(path.join(sessionDir, "logs.txt"), line, "utf8");
+  if (sessionDir) {
+    const dir = path.join(sessionDir, "logs");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(path.join(dir, "logs.txt"), line, "utf8");
+  } else {
+    const logFile = path.join(officeRoot(projectRoot), "logs.txt");
+    fs.mkdirSync(path.dirname(logFile), { recursive: true });
+    fs.appendFileSync(logFile, line, "utf8");
+  }
 }
 
 export function appendPerf(
@@ -32,6 +28,7 @@ export function appendPerf(
     attempt: number;
     error?: string;
   },
+  sessionDir?: string,
 ): void {
   const ts = new Date().toISOString();
   const secs = (entry.durationMs / 1000).toFixed(1);
@@ -40,9 +37,16 @@ export function appendPerf(
     line += ` | ${entry.error}`;
   }
   line += "\n";
-  const perfFile = path.join(officeRoot(projectRoot), "performance.txt");
-  fs.mkdirSync(path.dirname(perfFile), { recursive: true });
-  fs.appendFileSync(perfFile, line, "utf8");
+
+  if (sessionDir) {
+    const dir = path.join(sessionDir, "logs");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(path.join(dir, "performance.txt"), line, "utf8");
+  } else {
+    const perfFile = path.join(officeRoot(projectRoot), "performance.txt");
+    fs.mkdirSync(path.dirname(perfFile), { recursive: true });
+    fs.appendFileSync(perfFile, line, "utf8");
+  }
 }
 
 export function appendLlmLog(
@@ -58,8 +62,9 @@ export function appendLlmLog(
     response: string;
     error?: string;
   },
+  sessionDir?: string,
 ): void {
-  const dir = logsDir(projectRoot);
+  const dir = sessionDir ? path.join(sessionDir, "logs") : path.join(officeRoot(projectRoot), "logs");
   fs.mkdirSync(dir, { recursive: true });
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
   const logFile = path.join(dir, `${data.role}-${ts}.log`);
