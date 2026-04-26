@@ -176,7 +176,7 @@ export async function runStageManager(
   session: Session,
   config: Config,
   projectRoot: string,
-): Promise<void> {
+): Promise<string[]> {
   const systemPrompt = readTemplate("stage-manager");
 
   const spaceDesc = readFileOrEmpty(path.join(sessionDir, "spaces", `${session.spaceName}.txt`));
@@ -221,13 +221,17 @@ export async function runStageManager(
     }
   }
 
+  const narrationLines: string[] = [];
   if (currentState.narration?.trim()) {
     for (const line of currentState.narration.trim().split("\n")) {
       if (line.trim()) {
-        appendTimeline(sessionDir, `[Narration] ${line.trim()}`);
+        const formatted = `[Narration] ${line.trim()}`;
+        appendTimeline(sessionDir, formatted);
+        narrationLines.push(formatted);
       }
     }
   }
+  return narrationLines;
 }
 
 function applyDiffs(

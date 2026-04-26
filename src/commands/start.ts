@@ -11,6 +11,7 @@ export interface StartOptions {
   characters: string;
   description?: string;
   user?: string;
+  port?: number;
   projectRoot?: string;
 }
 
@@ -117,7 +118,7 @@ export async function runStart(opts: StartOptions): Promise<void> {
   }
   console.log("");
 
-  await runSessionLoop(sessionDir, { projectRoot });
+  await runSessionLoop(sessionDir, { projectRoot, port: opts.port });
 }
 
 function extractFirstRoom(spaceFile: string): string {

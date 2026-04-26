@@ -82,17 +82,20 @@ session
   .requiredOption("--characters <names>", "comma-separated character names")
   .option("--description <text>", "session description", "Office simulation")
   .option("--user <name>", "character controlled by the human user")
+  .option("--port <port>", "start API server on this port")
   .action(async (opts: {
     space: string;
     characters: string;
     description?: string;
     user?: string;
+    port?: string;
   }) => {
     await runStart({
       space: opts.space,
       characters: opts.characters,
       description: opts.description,
       user: opts.user,
+      port: opts.port ? parseInt(opts.port, 10) : undefined,
       projectRoot: process.cwd(),
     });
   });
@@ -101,8 +104,12 @@ session
   .command("continue")
   .description("Resume a paused session")
   .argument("<session_name>", "session directory name")
-  .action(async (sessionName: string) => {
-    await runContinue(sessionName, { projectRoot: process.cwd() });
+  .option("--port <port>", "start API server on this port")
+  .action(async (sessionName: string, cmdOpts: { port?: string }) => {
+    await runContinue(sessionName, {
+      port: cmdOpts.port ? parseInt(cmdOpts.port, 10) : undefined,
+      projectRoot: process.cwd(),
+    });
   });
 
 session

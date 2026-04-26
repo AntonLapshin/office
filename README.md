@@ -76,6 +76,13 @@ office session list                                         # List all sessions
 | `--characters <names>` | Comma-separated character names |
 | `--description <text>` | Scene-setting description (default: "Office simulation") |
 | `--user <name>` | Which character you control (omit for fully autonomous) |
+| `--port <port>` | Start an HTTP API server on this port (for UI integration) |
+
+#### session continue options
+
+| Option | Description |
+|---|---|
+| `--port <port>` | Start an HTTP API server on this port (for UI integration) |
 
 #### session add-character
 
@@ -298,6 +305,87 @@ When it's your turn:
 - Just a message — addresses everyone in the room
 - `/quit` — pause the session
 - Empty line — skip your turn
+
+## API server (UI integration)
+
+Pass `--port` to expose an HTTP API that a separate UI app can connect to:
+
+```bash
+office session start --space startup --characters dan,boris --user dan --port 3001
+```
+
+When `--port` is set, user input is accepted via `POST /api/message` instead of the terminal. The terminal still shows session output.
+
+### REST endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/session` | Session metadata (id, status, round, characters, etc.) |
+| `GET` | `/api/state` | Full snapshot: session + all character states |
+| `GET` | `/api/timeline` | All timeline lines as `{ lines: string[] }` |
+| `GET` | `/api/layout` | Space layout JSON (2D visualization data) |
+| `POST` | `/api/message` | Submit user input: `{ "message": "Boris: Hey!" }` |
+| `GET` | `/api/events` | SSE stream for real-time updates |
+
+All endpoints return JSON with CORS headers (`Access-Control-Allow-Origin: *`).
+
+### POST /api/message
+
+Send user speech when it's the user character's turn. Returns `409` if the session is not waiting for input.
+
+```bash
+curl -X POST http://localhost:3001/api/message \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Boris: Hey, welcome to the team!"}'
+```
+
+Send `{"message": "/quit"}` to pause the session.
+
+### Server-Sent Events (GET /api/events)
+
+Connect to receive real-time updates:
+
+```js
+const events = new EventSource("http://localhost:3001/api/events");
+
+events.addEventListener("round", (e) => {
+  // { round: 2 }
+});
+
+events.addEventListener("turn", (e) => {
+  // { character: "Boris" } — an NPC's turn started
+});
+
+events.addEventListener("speech", (e) => {
+  // { line: "Boris => Dan: Hey!" } — a character spoke
+});
+
+events.addEventListener("narration", (e) => {
+  // { lines: ["[Narration] Boris walks to the desk."] }
+});
+
+events.addEventListener("state", (e) => {
+  // { characters: { Dan: {...}, Boris: {...} } } — after stage manager update
+});
+
+events.addEventListener("waiting", (e) => {
+  // { character: "Dan" } — waiting for user input via POST /api/message
+});
+
+events.addEventListener("paused", (e) => {
+  // {} — session paused
+});
+```
+
+### Typical UI flow
+
+1. `GET /api/state` — load initial session and character data
+2. `GET /api/timeline` — load conversation history
+3. `GET /api/layout` — load space layout for 2D rendering
+4. Connect to `GET /api/events` — subscribe to real-time updates
+5. On `waiting` event — show input UI, send `POST /api/message` with user text
+6. On `speech` / `narration` events — append to conversation view
+7. On `state` event — update character positions, moods, etc.
 
 ## Development
 
