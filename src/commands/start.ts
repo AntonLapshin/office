@@ -58,6 +58,11 @@ export async function runStart(opts: StartOptions): Promise<void> {
     fs.copyFileSync(summaryFile, path.join(sessionSpacesDir, `${spaceName}_summary.txt`));
   }
 
+  const layoutFile = path.join(spacesDir(projectRoot), `${spaceName}.json`);
+  if (fs.existsSync(layoutFile)) {
+    fs.copyFileSync(layoutFile, path.join(sessionSpacesDir, `${spaceName}.json`));
+  }
+
   for (const name of characterNames) {
     const src = path.join(charactersDir(projectRoot), `${name}.txt`);
     fs.copyFileSync(src, path.join(sessionCharsDir, `${name}.txt`));
@@ -87,7 +92,7 @@ export async function runStart(opts: StartOptions): Promise<void> {
   }
 
   fs.writeFileSync(path.join(sessionDir, "timeline.log"), "", "utf8");
-  appendTimeline(sessionDir, `[Stage Manager] ${description}`);
+  appendTimeline(sessionDir, `[Narration] ${description}`);
 
   const session: Session = {
     id: sessionId,

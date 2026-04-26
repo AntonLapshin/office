@@ -46,3 +46,19 @@ export const diffEntrySchema = z.object({
 export type DiffEntry = z.infer<typeof diffEntrySchema>;
 
 export const stageManagerDiffResponseSchema = z.array(diffEntrySchema);
+
+export const spaceObjectSchema = z.object({
+  id: z.string().min(1),
+  type: z.string().min(1),
+  label: z.string().min(1),
+  x: z.number(),
+  y: z.number(),
+  w: z.number(),
+  h: z.number(),
+});
+
+export const spaceLayoutSchema = z.object({
+  name: z.string().min(1),
+  bounds: z.object({ width: z.number(), height: z.number() }),
+  objects: z.array(spaceObjectSchema),
+});

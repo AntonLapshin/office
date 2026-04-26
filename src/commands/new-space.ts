@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spacesDir, slugify } from "../lib/paths.js";
 import { readConfig } from "../lib/config.js";
-import { runSpaceCreator, runSpaceSummarizer } from "../lib/persona.js";
+import { runSpaceCreator, runSpaceSummarizer, runSpaceLayoutGenerator } from "../lib/persona.js";
 import { appendLog } from "../lib/logger.js";
 
 export interface NewSpaceOptions {
@@ -30,10 +30,16 @@ export async function runNewSpace(
     console.log(`\nSpace created: ${outputPath}`);
 
     const spaceText = fs.readFileSync(outputPath, "utf8");
+
     const summaryPath = path.join(spacesDir(projectRoot), `${slug}_summary.txt`);
     console.log("Generating space summary...");
     await runSpaceSummarizer(spaceText, summaryPath, config, projectRoot);
     console.log(`Summary created: ${summaryPath}`);
+
+    const layoutPath = path.join(spacesDir(projectRoot), `${slug}.json`);
+    console.log("Generating space layout...");
+    await runSpaceLayoutGenerator(spaceText, layoutPath, config, projectRoot);
+    console.log(`Layout created: ${layoutPath}`);
   } else {
     appendLog(projectRoot, "new-space", `FAILED — file not created at ${outputPath}`);
     console.error(`\nSpace creation failed — check .office/logs/ for details`);

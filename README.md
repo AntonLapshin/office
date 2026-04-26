@@ -50,7 +50,7 @@ office space create <description...> --name <name>  # Generate a new space
 office space list                                    # List all spaces
 ```
 
-The `--name` flag is required and determines the filename for the space. A short summary is also generated automatically and used in character prompts.
+The `--name` flag is required and determines the filename for the space. Two follow-up LLM calls are made automatically: a short summary (used in character prompts) and a layout JSON (2D visualization data with room/furniture positions).
 
 ### Characters
 
@@ -262,6 +262,7 @@ characters/
 spaces/
   <space_name>.txt        # Cloned space description
   <space_name>_summary.txt # Space summary for character prompts
+  <space_name>.json       # Space layout for 2D visualization
 logs/
   logs.txt                # Operation log
   performance.txt         # LLM call timing data
@@ -279,9 +280,9 @@ logs/
 ### Timeline format
 
 ```
-[Stage Manager] Dan is working at his desk when Boris enters for his first day
+[Narration] Dan is working at his desk when Boris enters for his first day
 Boris => Dan: Hey, I'm Boris — just started today. Are you Dan?
-[Stage Manager] Boris walks closer to Dan's desk. Dan looks up from his screen.
+[Narration] Boris walks closer to Dan's desk. Dan looks up from his screen.
 Dan => Boris: Hey Boris, welcome! Let me show you around.
 ```
 

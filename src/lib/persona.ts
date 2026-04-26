@@ -4,7 +4,7 @@ import { personaTemplateDir } from "./paths.js";
 import { callLlm, callLlmJson } from "./llm.js";
 import { readCharacterState, writeCharacterState } from "./session-io.js";
 import { appendTimeline, readRecentTimeline } from "./timeline.js";
-import { characterStateSchema, stageManagerDiffResponseSchema, type CharacterState, type DiffEntry, type Session } from "./schema.js";
+import { characterStateSchema, stageManagerDiffResponseSchema, spaceLayoutSchema, type CharacterState, type DiffEntry, type Session } from "./schema.js";
 import type { Config } from "./config.js";
 
 export type PersonaRole =
@@ -57,6 +57,40 @@ export async function runSpaceSummarizer(
 
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   fs.writeFileSync(outputPath, response.trim() + "\n", "utf8");
+}
+
+export async function runSpaceLayoutGenerator(
+  spaceText: string,
+  outputPath: string,
+  config: Config,
+  projectRoot: string,
+): Promise<void> {
+  const systemPrompt = [
+    "You convert a virtual office space description into a JSON layout for 2D visualization.",
+    "Return a JSON object with:",
+    '- "name": the space name',
+    '- "bounds": { "width": number, "height": number } — canvas size in pixels, typically 600x480',
+    '- "objects": array of objects, each with:',
+    '  - "id": kebab-case identifier (e.g. "phone-booth", "desk-1")',
+    '  - "type": one of "room", "desk", "table", "chair", "couch", "plant", "machine" or similar',
+    '  - "label": human-readable name',
+    '  - "x", "y": top-left position in pixels',
+    '  - "w", "h": width and height in pixels',
+    "",
+    "Place rooms and furniture so they roughly match the described layout.",
+    "Objects must not overlap and must fit within bounds.",
+    "Include all rooms as type \"room\" and key furniture items inside them.",
+  ].join("\n");
+
+  const userPrompt = `Generate a layout JSON for this space:\n\n${spaceText}`;
+
+  const result = await callLlmJson({
+    config, role: "space-creator", systemPrompt, userPrompt, projectRoot,
+    schema: spaceLayoutSchema,
+  });
+
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, JSON.stringify(result, null, 2) + "\n", "utf8");
 }
 
 export async function runCharacterCreator(
@@ -154,14 +188,14 @@ export async function runStageManager(
   }
 
   const userPrompt = [
-    "RECENT TIMELINE (last 10 entries):",
-    timeline || "(empty)",
-    "",
     "LOCATION DESCRIPTION:",
     spaceDesc,
     "",
     "CURRENT STATE (JSON):",
     JSON.stringify({ narration: "", characters }, null, 2),
+    "",
+    "RECENT TIMELINE (last 10 entries):",
+    timeline || "(empty)",
   ].join("\n");
 
   const diffs = await callLlmJson({
@@ -190,7 +224,7 @@ export async function runStageManager(
   if (currentState.narration?.trim()) {
     for (const line of currentState.narration.trim().split("\n")) {
       if (line.trim()) {
-        appendTimeline(sessionDir, `[Stage Manager] ${line.trim()}`);
+        appendTimeline(sessionDir, `[Narration] ${line.trim()}`);
       }
     }
   }
@@ -228,9 +262,12 @@ function applyDiffs(
 
         case "memory":
           if (diff.op === "add") {
-            char.memory.push(String(diff.value ?? ""));
-            if (char.memory.length > 50) {
-              char.memory = char.memory.slice(-50);
+            const entry = String(diff.value ?? "");
+            if (!char.memory.includes(entry)) {
+              char.memory.push(entry);
+              if (char.memory.length > 50) {
+                char.memory = char.memory.slice(-50);
+              }
             }
           } else if (diff.op === "delete") {
             char.memory = char.memory.filter(m => m !== String(diff.value));
