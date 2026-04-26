@@ -22,7 +22,7 @@ For each character, determine based on the timeline:
 - Were any intents resolved? Add new ones as short strings?
 - Add a short memory string if the character witnessed something notable.
 
-Valid mood values: neutral, happy, sad, angry, anxious, excited, bored, confused, focused, relaxed
+Example of mood values: neutral, happy, sad, angry, anxious, excited, bored, confused, focused, relaxed
 
 Rules:
 - Never generate dialogue, narration only

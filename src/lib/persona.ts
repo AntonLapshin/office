@@ -124,7 +124,7 @@ export async function runStageManager(
   const systemPrompt = readTemplate("stage-manager");
 
   const spaceDesc = readFileOrEmpty(path.join(sessionDir, `${session.spaceName}.txt`));
-  const timeline = readRecentTimeline(sessionDir, 50).join("\n");
+  const timeline = readRecentTimeline(sessionDir, 10).join("\n");
 
   const characters: Record<string, unknown> = {};
   for (const name of session.characters) {

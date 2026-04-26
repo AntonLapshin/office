@@ -140,6 +140,12 @@ async function fetchCompletion(
   return fetchOpenAI(provider, apiKey, model, systemPrompt, userPrompt, timeoutMs);
 }
 
+function cleanReasoning(text: string): string {
+  let cleaned = text.replace(/<thought>[\s\S]*?<\/thought>/gi, "").trim();
+  cleaned = cleaned.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim();
+  return cleaned;
+}
+
 export async function callLlm(opts: LlmCallOptions): Promise<string> {
   const provider = resolveProvider(opts.config);
   const apiKey = resolveApiKey(provider);
@@ -167,7 +173,8 @@ export async function callLlm(opts: LlmCallOptions): Promise<string> {
         console.log(`[office] ${opts.role} | model=${model} | attempt ${attempt}/${opts.config.retries} | ${durationMs}ms | success`);
       }
 
-      return response;
+      const cleaned = cleanReasoning(response);
+      return cleaned;
     } catch (err) {
       const durationMs = Date.now() - start;
       lastError = err instanceof Error ? err : new Error(String(err));
@@ -190,8 +197,7 @@ export async function callLlm(opts: LlmCallOptions): Promise<string> {
 }
 
 function stripLlmWrapping(text: string): string {
-  let cleaned = text.replace(/<thought>[\s\S]*?<\/thought>/gi, "").trim();
-  cleaned = cleaned.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim();
+  let cleaned = cleanReasoning(text);
   const fenced = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
   if (fenced) return fenced[1].trim();
   return cleaned.trim();

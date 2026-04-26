@@ -1,15 +1,9 @@
 import { z } from "zod";
 
-export const moodSchema = z.enum([
-  "neutral", "happy", "sad", "angry", "anxious",
-  "excited", "bored", "confused", "focused", "relaxed",
-]);
-export type Mood = z.infer<typeof moodSchema>;
-
 export const characterStateSchema = z.object({
   name: z.string().min(1),
   location: z.string(),
-  mood: moodSchema.default("neutral"),
+  mood: z.string().default("neutral"),
   currentAction: z.string().default("standing"),
   intents: z.array(z.string()).default([]),
   memory: z.array(z.string()).default([]),
