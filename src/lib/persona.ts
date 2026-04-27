@@ -129,13 +129,17 @@ export async function runCharacterAgent(
   const charState = readCharacterState(sessionDir, characterName);
   const spaceDesc = readFileOrEmpty(path.join(sessionDir, "spaces", `${session.spaceName}_summary.txt`));
 
+  const memoryLines = charState.memory.map((m, i) => `  ${i + 1}. ${m}`).join("\n");
+
   const stateText = [
     `LOCATION: ${charState.location}`,
     `CURRENT ACTION: ${charState.currentAction}`,
     `MOOD: ${charState.mood}`,
-    `INTENT: ${charState.intent}`,
-    `MEMORY: ${charState.memory.join(", ")}`,
     `RELATIONSHIPS: ${Object.entries(charState.relationships).map(([k, v]) => `${k}=${v}`).join(", ")}`,
+    `INTENT: ${charState.intent}`,
+    "MEMORY:",
+    memoryLines,
+    "  (Your speech must follow logically from these memories, your intent, current state, the space, and other characters present.)",
   ].join("\n");
 
   const otherStates: string[] = [];
@@ -152,14 +156,14 @@ export async function runCharacterAgent(
     "YOUR CHARACTER DESCRIPTION:",
     charDesc,
     "",
-    "YOUR CURRENT STATE:",
-    stateText,
-    "",
     "SPACE:",
     spaceDesc,
     "",
     "OTHER CHARACTERS IN SIMULATION:",
     otherStates.length > 0 ? otherStates.join("\n") : "(none)",
+    "",
+    "YOUR CURRENT STATE:",
+    stateText,
   ].join("\n");
 
   const response = await callLlm({
@@ -184,7 +188,8 @@ export async function runStageManager(
 
   const characters: Record<string, unknown> = {};
   for (const name of session.characters) {
-    characters[name] = readCharacterState(sessionDir, name);
+    const state = readCharacterState(sessionDir, name);
+    characters[name] = { ...state, memory: state.memory.slice(-5) };
   }
 
   const userPrompt = [

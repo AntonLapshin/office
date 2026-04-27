@@ -30,20 +30,13 @@ Example output:
   { "path": "characters.Anton.intent", "op": "set", "value": "drink coffee and relax" }
 ]
 
-Required diffs:
-- A "narration" diff is ALWAYS required (set value to empty string if nothing physical happened)
-- A "memory" diff (op: "add") is REQUIRED for every character who experienced or witnessed the last event in the timeline. Only characters in the same room or adjacent rooms experience the event. Characters in distant rooms are unaffected and should NOT get a memory diff.
-
-Memory instructions:
-- Each memory entry should be a short summary of what happened (under 15 words)
-- Memory captures what the character perceived: who spoke, what was said or done, and any emotional impression
-- NEVER duplicate an existing memory — check the character's current memory list before adding. If the event is already captured, do not add it again.
-
-For each character who experienced the event, also consider:
-- Should they move to another room? Update location and currentAction.
-- How does recent speech or action affect their mood?
-- New impressions of others? Update relationships.
-- Should the intent be updated based on what happened?
+Mutable fields — when to include each diff:
+- narration: ALWAYS required. Describe physical actions; set to empty string if nothing physical happened.
+- memory (op: "add"): ALWAYS required for each character who experienced or witnessed the most recent timeline event. Only characters in the same or adjacent rooms are affected — distant characters get no memory. Each entry must be under 25 words, capturing what the character perceived. NEVER duplicate an existing memory.
+- location: REQUIRED only if a character physically moves as a result of the most recent timeline event.
+- intent: Almost always required when a character receives a new memory entry. The intent should follow logically from the event.
+- mood: REQUIRED only if the most recent timeline event affects the character's emotional state.
+- relationships: REQUIRED only if the most recent event changes how characters perceive each other.
 
 Example of mood values: neutral, happy, sad, angry, anxious, excited, bored, confused, focused, relaxed
 
