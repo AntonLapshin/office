@@ -40,6 +40,7 @@ export async function runSessionLoop(
       if (characterName === session.userCharacter) {
         let userInput: string | null;
         if (server) {
+          console.log(`Waiting for user input from ${characterName}...`);
           userInput = await server.waitForMessage(characterName);
         } else {
           printRecentTimeline(sessionDir, 10);
