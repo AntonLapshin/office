@@ -10,7 +10,8 @@ import type { Config } from "./config.js";
 export type PersonaRole =
   | "space-creator"
   | "character-creator"
-  | "stage-manager"
+  | "stage-analyzer"
+  | "stage-diff-builder"
   | "character-agent";
 
 function readTemplate(role: PersonaRole): string {
@@ -175,36 +176,79 @@ export async function runCharacterAgent(
   return speechLine;
 }
 
+function formatCharacterStates(sessionDir: string, characters: string[]): string {
+  const sections: string[] = [];
+  for (const name of characters) {
+    const s = readCharacterState(sessionDir, name);
+    const lines = [
+      `${name}:`,
+      `  Location: ${s.location}`,
+      `  Mood: ${s.mood}`,
+      `  Current action: ${s.currentAction}`,
+      `  Intent: ${s.intent}`,
+    ];
+    const rels = Object.entries(s.relationships);
+    if (rels.length > 0) {
+      lines.push(`  Relationships: ${rels.map(([k, v]) => `${k} (${v})`).join(", ")}`);
+    }
+    const recentMemory = s.memory.slice(-5);
+    if (recentMemory.length > 0) {
+      lines.push("  Recent memories:");
+      for (const m of recentMemory) {
+        lines.push(`    - ${m}`);
+      }
+    }
+    sections.push(lines.join("\n"));
+  }
+  return sections.join("\n\n");
+}
+
 export async function runStageManager(
   sessionDir: string,
   session: Session,
   config: Config,
   projectRoot: string,
 ): Promise<string[]> {
-  const systemPrompt = readTemplate("stage-manager");
-
   const spaceDesc = readFileOrEmpty(path.join(sessionDir, "spaces", `${session.spaceName}.txt`));
   const timeline = readRecentTimeline(sessionDir, 10).join("\n");
+  const characterStates = formatCharacterStates(sessionDir, session.characters);
 
-  const characters: Record<string, unknown> = {};
-  for (const name of session.characters) {
-    const state = readCharacterState(sessionDir, name);
-    characters[name] = { ...state, memory: state.memory.slice(-5) };
-  }
-
-  const userPrompt = [
+  const analyzerPrompt = [
     "LOCATION DESCRIPTION:",
     spaceDesc,
     "",
-    "CURRENT STATE (JSON):",
-    JSON.stringify({ narration: "", characters }, null, 2),
+    "CURRENT CHARACTER STATES:",
+    characterStates,
     "",
     "RECENT TIMELINE (last 10 entries):",
     timeline || "(empty)",
   ].join("\n");
 
+  const analysis = await callLlm({
+    config, role: "stage-analyzer",
+    systemPrompt: readTemplate("stage-analyzer"),
+    userPrompt: analyzerPrompt,
+    projectRoot, sessionDir,
+  });
+
+  if (!analysis.trim()) {
+    throw new Error("stage-analyzer produced empty output");
+  }
+
+  const characterList = session.characters.map((n) => `- ${n}`).join("\n");
+  const diffBuilderPrompt = [
+    "CHARACTERS:",
+    characterList,
+    "",
+    "ANALYSIS:",
+    analysis,
+  ].join("\n");
+
   const diffs = await callLlmJson({
-    config, role: "stage-manager", systemPrompt, userPrompt, projectRoot, sessionDir,
+    config, role: "stage-diff-builder",
+    systemPrompt: readTemplate("stage-diff-builder"),
+    userPrompt: diffBuilderPrompt,
+    projectRoot, sessionDir,
     schema: stageManagerDiffResponseSchema,
   });
 

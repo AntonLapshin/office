@@ -13,7 +13,8 @@ const providerSchema = z.object({
 export type Provider = z.infer<typeof providerSchema>;
 
 const modelsSchema = z.object({
-  "stage-manager": z.string().nullable().default(null),
+  "stage-analyzer": z.string().nullable().default(null),
+  "stage-diff-builder": z.string().nullable().default(null),
   "character-agent": z.string().nullable().default(null),
   "character-creator": z.string().nullable().default(null),
   "space-creator": z.string().nullable().default(null),
